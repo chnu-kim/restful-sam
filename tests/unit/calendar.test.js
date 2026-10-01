@@ -1,0 +1,107 @@
+import { describe, expect, it } from 'vitest';
+import {
+  addDays, addMonths, computeStats, currentStreak, dayOfWeek, dayStatus, esc, firstMonth, groupByDay, hm, monthDays, todayKst,
+} from '../../src/calendar.js';
+
+const s = (openDate, closeDate = null) => ({ openDate, closeDate, title: 't', category: null });
+const ctxOf = (streams, since, today) => ({ byDay: groupByDay(streams), since, today });
+
+describe('날짜 유틸', () => {
+  it('todayKst는 KST 자정 경계를 따른다', () => {
+    expect(todayKst(Date.parse('2026-09-30T14:59:59Z'))).toBe('2026-09-30');
+    expect(todayKst(Date.parse('2026-09-30T15:00:00Z'))).toBe('2026-10-01');
+    expect(todayKst()).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+  });
+
+  it('addDays는 월·연·윤년 경계를 넘는다', () => {
+    expect(addDays('2026-09-30', 1)).toBe('2026-10-01');
+    expect(addDays('2026-01-01', -1)).toBe('2025-12-31');
+    expect(addDays('2028-02-28', 1)).toBe('2028-02-29');
+  });
+
+  it('addMonths는 연도를 넘는다', () => {
+    expect(addMonths('2026-12', 1)).toBe('2027-01');
+    expect(addMonths('2026-01', -1)).toBe('2025-12');
+  });
+
+  it('dayOfWeek', () => {
+    expect(dayOfWeek('2026-10-01')).toBe(4); // 목
+  });
+
+  it('monthDays는 그 달의 모든 날짜를 준다', () => {
+    expect(monthDays('2026-02')).toHaveLength(28);
+    expect(monthDays('2028-02')).toHaveLength(29);
+    expect(monthDays('2026-10')[30]).toBe('2026-10-31');
+  });
+
+  it('hm은 시:분만, 없으면 빈 문자열', () => {
+    expect(hm('2026-10-01 08:49:35')).toBe('08:49');
+    expect(hm(null)).toBe('');
+  });
+
+  it('esc는 HTML 특수문자를 이스케이프하고 null을 빈 문자열로', () => {
+    expect(esc(`<img src=x onerror="a('b')">&`)).toBe('&lt;img src=x onerror=&quot;a(&#39;b&#39;)&quot;&gt;&amp;');
+    expect(esc(null)).toBe('');
+    expect(esc(3)).toBe('3');
+  });
+});
+
+describe('groupByDay', () => {
+  it('시작일 기준으로 묶고, 자정을 넘긴 방송은 시작일에 속한다', () => {
+    const map = groupByDay([s('2026-10-01 10:00:00'), s('2026-10-01 23:00:00', '2026-10-02 03:00:00'), s('2026-10-03 09:00:00')]);
+    expect(map.get('2026-10-01')).toHaveLength(2);
+    expect(map.has('2026-10-02')).toBe(false);
+    expect(map.get('2026-10-03')).toHaveLength(1);
+  });
+});
+
+describe('dayStatus', () => {
+  const ctx = ctxOf([s('2026-09-25 08:49:35', '2026-09-25 15:24:35'), s('2026-10-03 20:00:00')], '2026-10-01', '2026-10-03');
+
+  it.each([
+    ['2026-09-25', 'on', '기록 시작 전이라도 방송 기록이 있으면 방송'],
+    ['2026-09-30', 'nodata', '기록 시작 전'],
+    ['2026-10-01', 'off', '10/1은 휴방'],
+    ['2026-10-02', 'off', '지난 날 기록 없음 = 휴방'],
+    ['2026-10-03', 'on', '오늘 방송'],
+    ['2026-10-04', 'future', '미래'],
+  ])('%s → %s (%s)', (d, expected) => {
+    expect(dayStatus(d, ctx)).toBe(expected);
+  });
+
+  it('오늘 방송이 없으면 pending', () => {
+    expect(dayStatus('2026-10-02', ctxOf([], '2026-10-01', '2026-10-02'))).toBe('pending');
+  });
+});
+
+describe('computeStats / currentStreak', () => {
+  it('오늘이 미정이면 어제부터 연속 휴방을 센다', () => {
+    const ctx = ctxOf([s('2026-09-28 10:00:00')], '2026-09-28', '2026-10-02');
+    expect(computeStats(ctx)).toEqual({ on: 1, off: 3, rate: 25, streak: 3, streakKind: 'off' });
+  });
+
+  it('오늘 방송했으면 오늘부터 연속 방송을 센다', () => {
+    const ctx = ctxOf([s('2026-10-01 10:00:00'), s('2026-10-02 10:00:00')], '2026-09-30', '2026-10-02');
+    expect(computeStats(ctx)).toEqual({ on: 2, off: 1, rate: 67, streak: 2, streakKind: 'on' });
+  });
+
+  it('기록 첫날이 오늘이고 미정이면 0일·0%', () => {
+    const ctx = ctxOf([], '2026-10-02', '2026-10-02');
+    expect(computeStats(ctx)).toEqual({ on: 0, off: 0, rate: 0, streak: 0, streakKind: null });
+  });
+
+  it('연속 기록은 기록 시작 전(nodata)에서 멈춘다', () => {
+    const ctx = ctxOf([], '2026-10-01', '2026-10-03');
+    expect(currentStreak(ctx)).toEqual({ streak: 2, streakKind: 'off' });
+  });
+});
+
+describe('firstMonth', () => {
+  it('기록 시작일보다 이른 방송이 있으면 그 달', () => {
+    expect(firstMonth({ since: '2026-10-01', streams: [s('2026-09-25 08:00:00')] })).toBe('2026-09');
+  });
+  it('방송이 없거나 더 늦으면 기록 시작 달', () => {
+    expect(firstMonth({ since: '2026-10-01', streams: [] })).toBe('2026-10');
+    expect(firstMonth({ since: '2026-10-01', streams: [s('2026-10-05 08:00:00')] })).toBe('2026-10');
+  });
+});
