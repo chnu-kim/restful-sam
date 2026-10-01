@@ -210,39 +210,21 @@ export function applyTheme(root, win, choice) {
   }
 }
 
-// 테마 버튼: 누르면 시스템/라이트/다크 메뉴를 연다. 아이콘은 고른 값(data-theme 유무)을 CSS로 따른다
+// 테마 버튼: 누를 때마다 시스템 → 라이트 → 다크 순서로 바뀐다. 아이콘은 고른 값(data-theme 유무)을 CSS로 따른다
+const THEME_ORDER = ['system', 'light', 'dark'];
+
 export function bindTheme(root = document, win = window) {
   const btn = root.getElementById('theme');
-  const menu = root.getElementById('theme-menu');
+  const current = () => root.documentElement.dataset.theme ?? 'system';
   const sync = () => {
-    const choice = root.documentElement.dataset.theme ?? 'system';
-    btn.setAttribute('aria-label', `테마: ${THEME_LABELS[choice]}`);
-    menu.querySelectorAll('[data-choice]').forEach((b) => b.setAttribute('aria-checked', String(b.dataset.choice === choice)));
-  };
-  const setOpen = (open) => {
-    menu.hidden = !open;
-    btn.setAttribute('aria-expanded', String(open));
+    const label = `테마: ${THEME_LABELS[current()]}`;
+    btn.setAttribute('aria-label', label);
+    btn.title = label;
   };
   btn.addEventListener('click', () => {
-    setOpen(menu.hidden);
-    if (!menu.hidden) menu.querySelector('[aria-checked="true"]').focus();
-  });
-  menu.addEventListener('click', (e) => {
-    const item = e.target.closest('[data-choice]');
-    if (!item) return;
-    applyTheme(root, win, item.dataset.choice);
+    const next = THEME_ORDER[(THEME_ORDER.indexOf(current()) + 1) % THEME_ORDER.length];
+    applyTheme(root, win, next);
     sync();
-    setOpen(false);
-    btn.focus();
-  });
-  // 메뉴 밖을 누르거나 Esc로 닫는다
-  root.addEventListener('click', (e) => {
-    if (!menu.hidden && !e.target.closest('.theme-wrap')) setOpen(false);
-  });
-  root.addEventListener('keydown', (e) => {
-    if (e.key !== 'Escape' || menu.hidden) return;
-    setOpen(false);
-    btn.focus();
   });
   sync();
 }
