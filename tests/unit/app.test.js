@@ -284,6 +284,41 @@ describe('달력', () => {
     expect($('#info li').textContent).toBe('20:00 ~ 약 20:09 · 약 9분A');
   });
 
+  it('방송 중 카테고리를 바꿨으면 구간별로 보여 준다', () => {
+    const x = {
+      ...st('2026-10-01 07:55:00', '2026-10-01 16:17:00', '엘밤통', 'ELDEN RING'),
+      categories: [{ from: '2026-10-01 07:55:00', category: '저스트 채팅' }, { from: '2026-10-01 09:10:00', category: 'ELDEN RING' }, { from: '2026-10-01 15:00:00', category: null }],
+    };
+    const live = { ...st('2026-10-02 20:00:00', null, '방송', 'b'), categories: [{ from: '2026-10-02 20:00:00', category: 'a' }, { from: '2026-10-02 21:00:00', category: '<b>b</b>' }] };
+    const state = mount({ ...DATA, streams: [x, live] }, KST('2026-10-02 21:30:00'));
+    select(document, state, '2026-10-01');
+    expect($('#info li .muted').innerHTML).toBe('07:55~09:10 저스트 채팅<br>09:10~15:00 ELDEN RING<br>15:00~16:17 카테고리 없음');
+    select(document, state, '2026-10-02');
+    expect($('#info li .muted').textContent).toBe('20:00~21:00 a21:00~ <b>b</b>');
+  });
+
+  it('카테고리 구간의 마지막 끝은 방송 종료와 같게 표시하고, 0분·거꾸로인 구간은 뺀다', () => {
+    const cats = (...list) => list.map(([from, category]) => ({ from: `2026-10-01 ${from}`, category }));
+    const streams = [
+      // 종료 시각이 추정값
+      { ...st('2026-10-01 07:00:00', '2026-10-01 09:00:00', 'A'), closeApprox: true, categories: cats(['07:00:00', 'a1'], ['08:00:00', 'a2']) },
+      // 끝났지만 종료 시각을 모름
+      { ...st('2026-10-01 10:00:00', null, 'B'), ended: true, categories: cats(['10:00:00', 'b1'], ['11:00:00', 'b2']) },
+      // 마지막 확인에서 바뀌고 바로 끊김 (0분)
+      { ...st('2026-10-01 12:00:00', '2026-10-01 13:00:00', 'C'), closeApprox: true, categories: cats(['12:00:00', 'c1'], ['13:00:00', 'c2']) },
+      // 다시보기로 종료 시각이 당겨짐 (거꾸로) + 남은 구간이 둘
+      { ...st('2026-10-01 14:00:00', '2026-10-01 16:00:00', 'D'), categories: cats(['14:00:00', 'd1'], ['15:00:00', 'd2'], ['16:01:00', 'd3']) },
+    ];
+    const state = mount({ ...DATA, streams }, KST('2026-10-02 12:00:00'));
+    select(document, state, '2026-10-01');
+    const items = [...document.querySelectorAll('#info li')];
+    expect(items[0].querySelector('.muted').innerHTML).toBe('07:00~08:00 a1<br>08:00~약 09:00 a2');
+    expect(items[1].querySelector('.muted').innerHTML).toBe('10:00~11:00 b1<br>11:00~확인 중 b2');
+    // 0분 구간을 빼면 하나만 남아 괄호로
+    expect(items[2].querySelector('.muted').textContent).toBe('(c1)');
+    expect(items[3].querySelector('.muted').innerHTML).toBe('14:00~15:00 d1<br>15:00~16:00 d2');
+  });
+
   it('하루 여러 방송이면 각각의 시간과 합계', () => {
     const data = { ...DATA, streams: [st('2026-10-01 10:00:00', '2026-10-01 12:00:00', '아침'), st('2026-10-01 23:00:00', '2026-10-02 02:10:00', '심야')] };
     const state = mount(data, KST('2026-10-02 12:00:00'));

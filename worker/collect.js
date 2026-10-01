@@ -56,6 +56,15 @@ function normalize(data) {
 
 const sortStreams = (streams) => streams.sort((a, b) => a.openDate.localeCompare(b.openDate));
 
+// 방송 중에 카테고리를 바꾸면 언제부터 무엇을 했는지(categories: [{ from, category }]) 남긴다.
+// 바뀐 적이 없으면 남기지 않고, 처음 바뀔 때 '시작부터 직전 카테고리'를 첫 구간으로 채운다. at: 바뀐 걸 확인한 시각(KST)
+function categoryHistory(prev, stream, at) {
+  if (!prev) return undefined;
+  const history = prev.categories ?? [{ from: prev.openDate, category: prev.category }];
+  if (history.at(-1).category === stream.category) return prev.categories;
+  return [...history, { from: at, category: stream.category }];
+}
+
 // checkedAt: 이번 수집 시각(ISO). 방송 중일 때만 남겨 페이지가 live 값의 신선도를 판단하게 한다.
 // 방송 중인 방송에는 마지막으로 방송 중인 걸 본 시각(seenAt, KST)을 남겨, 종료를 놓쳤을 때 종료 시각 추정에 쓴다
 export function applyLiveStatus(data, live, today, checkedAt = null) {
@@ -75,6 +84,10 @@ export function applyLiveStatus(data, live, today, checkedAt = null) {
     };
     if (isLive && checkedAt) stream.seenAt = formatKst(Date.parse(checkedAt));
     const idx = next.streams.findIndex((s) => s.openDate === stream.openDate);
+    // 방송 중이면 이번 확인 시각, 끝난 뒤 처음 확인이면(마지막 확인과 종료 사이에 바뀜) 종료 시각부터로 본다
+    const changedAt = stream.seenAt ?? stream.closeDate ?? formatKst(Date.parse(checkedAt ?? '') || Date.now());
+    const categories = categoryHistory(next.streams[idx], stream, changedAt);
+    if (categories) stream.categories = categories;
     if (idx === -1) next.streams.push(stream);
     else next.streams[idx] = stream;
     // live-status는 마지막 방송만 알려준다. 그보다 먼저 시작해 아직 열려 있는 방송은 두 확인 사이에 끝난 것이다.
