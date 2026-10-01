@@ -22,11 +22,35 @@ export const hm = (dt) => (dt ? dt.slice(11, 16) : '');
 export const esc = (s) =>
   String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 
-// 지난 날 달력 칸에 보여 줄 방송 시간대: 그날 첫 시작 ~ 마지막 종료. 끝나지 않은 방송이 있으면 지어내지 않고 null
+// 지난 날 aria-label에 읽어 줄 방송 시간대: 그날 첫 시작 ~ 마지막 종료. 끝나지 않은 방송이 있으면 지어내지 않고 null
 export function dayTimeRange(streams) {
   if (!streams?.length || streams.some((s) => !s.closeDate)) return null;
   const close = streams.map((s) => s.closeDate).sort().at(-1);
   return { open: hm(streams[0].openDate), close: hm(close) };
+}
+
+// 분 단위로 자른 시각끼리 빼서, 화면에 보이는 시작~종료와 방송 시간이 어긋나지 않게 한다
+const toMinutes = (dt) => Date.parse(dt.slice(0, 16).replace(' ', 'T') + 'Z') / 60000;
+export const streamMinutes = (s) => (s.closeDate ? toMinutes(s.closeDate) - toMinutes(s.openDate) : null);
+
+// 그날 방송 시간의 합(분). 끝나지 않은 방송이 있으면 null
+export function dayMinutes(streams) {
+  if (!streams?.length || streams.some((s) => !s.closeDate)) return null;
+  return streams.reduce((sum, s) => sum + streamMinutes(s), 0);
+}
+
+// 달력 칸용 '8h22m', 상세용 '8시간 22분'
+export function durationShort(m) {
+  const h = Math.floor(m / 60);
+  const r = m % 60;
+  if (!h) return `${r}m`;
+  return r ? `${h}h${String(r).padStart(2, '0')}m` : `${h}h`;
+}
+
+export function durationLong(m) {
+  const h = Math.floor(m / 60);
+  const r = m % 60;
+  return [h && `${h}시간`, r && `${r}분`].filter(Boolean).join(' ') || '0분';
 }
 
 // 방송은 시작일 기준으로 그 날짜에 속한다

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-  addDays, addMonths, computeStats, currentStreak, dayOfWeek, dayStatus, dayTimeRange, esc, firstMonth, groupByDay, hm, isFinal, makeContext, monthDays, monthLabel, todayKst,
+  addDays, addMonths, computeStats, currentStreak, dayOfWeek, dayMinutes, dayStatus, dayTimeRange, durationLong, durationShort, esc, firstMonth, groupByDay, hm, isFinal, makeContext, monthDays, monthLabel, streamMinutes, todayKst,
 } from '../../src/calendar.js';
 
 const s = (openDate, closeDate = null) => ({ openDate, closeDate, title: 't', category: null });
@@ -199,5 +199,32 @@ describe('dayTimeRange', () => {
     expect(dayTimeRange([s('2026-09-24 10:00:00', '2026-09-24 12:00:00'), s('2026-09-24 20:00:00')])).toBeNull();
     expect(dayTimeRange([])).toBeNull();
     expect(dayTimeRange(undefined)).toBeNull();
+  });
+});
+
+describe('방송 시간', () => {
+  it('보이는 시각(분 단위)끼리 빼서 상세의 시작~종료와 어긋나지 않는다', () => {
+    // 실제로는 8시간 21분 32초지만 화면엔 07:55 ~ 16:17로 보이므로 8시간 22분
+    expect(streamMinutes(s('2026-09-24 07:55:37', '2026-09-24 16:17:09'))).toBe(502);
+    expect(streamMinutes(s('2026-09-24 23:00:00', '2026-09-25 02:10:00'))).toBe(190);
+    expect(streamMinutes(s('2026-09-24 23:00:00'))).toBeNull();
+  });
+
+  it('dayMinutes는 그날 방송을 합치고, 끝나지 않은 방송이 있거나 없으면 null', () => {
+    expect(dayMinutes([s('2026-09-24 10:00:00', '2026-09-24 12:00:00'), s('2026-09-24 20:00:00', '2026-09-25 02:10:00')])).toBe(490);
+    expect(dayMinutes([s('2026-09-24 10:00:00', '2026-09-24 12:00:00'), s('2026-09-24 20:00:00')])).toBeNull();
+    expect(dayMinutes([])).toBeNull();
+    expect(dayMinutes(undefined)).toBeNull();
+  });
+
+  it.each([
+    [0, '0m', '0분'],
+    [45, '45m', '45분'],
+    [480, '8h', '8시간'],
+    [502, '8h22m', '8시간 22분'],
+    [725, '12h05m', '12시간 5분'],
+  ])('%i분 → %s / %s', (m, short, long) => {
+    expect(durationShort(m)).toBe(short);
+    expect(durationLong(m)).toBe(long);
   });
 });

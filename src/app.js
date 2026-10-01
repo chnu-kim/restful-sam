@@ -1,6 +1,7 @@
 // 페이지 렌더링. 상태는 state 객체 하나로 들고, DOM은 root(document)에서 찾는다.
 import {
-  DOW, addDays, addMonths, computeStats, dayOfWeek, dayStatus, dayTimeRange, esc, firstMonth, hm, makeContext, monthDays, monthLabel, todayKst,
+  DOW, addDays, addMonths, computeStats, dayOfWeek, dayMinutes, dayStatus, dayTimeRange, durationLong, durationShort, esc, firstMonth, hm, makeContext, monthDays, monthLabel,
+  streamMinutes, todayKst,
 } from './calendar.js';
 
 const MARKS = { on: '방송', off: '휴방', pending: '?', unknown: '미확인', nodata: '', future: '' };
@@ -90,11 +91,16 @@ export function renderCalendar(root, state) {
   for (const d of days) {
     const s = dayStatus(d, ctx(state));
     const sel = d === state.selected;
-    // 지난 방송일은 시작~종료 시각도 보여 준다 (좁은 화면에선 CSS로 숨기고 '방송'만 표시)
-    const range = s === 'on' && d < state.today ? dayTimeRange(state.byDay.get(d)) : null;
-    const label = `${Number(d.slice(5, 7))}월 ${Number(d.slice(8))}일${LABELS[s] ? ' ' + LABELS[s] : ''}${range ? ` ${range.open}~${range.close}` : ''}`;
-    const time = range ? `<span class="time" aria-hidden="true">${range.open}<br>~${range.close}</span>` : '';
-    html += `<button class="day ${s}${range ? ' timed' : ''}${sel ? ' selected' : ''}" data-d="${d}" aria-label="${label}" aria-pressed="${sel}"${s === 'future' ? ' disabled' : ''}><span>${Number(d.slice(8))}</span><span class="mark">${MARKS[s]}</span>${time}</button>`;
+    // 지난 방송일은 '방송' 대신 방송 시간을 보여 주고, 시작~종료는 상세(누르기·마우스 올리기)에서 보여 준다
+    const mins = s === 'on' && d < state.today ? dayMinutes(state.byDay.get(d)) : null;
+    let label = `${Number(d.slice(5, 7))}월 ${Number(d.slice(8))}일${LABELS[s] ? ' ' + LABELS[s] : ''}`;
+    let mark = `<span class="mark">${MARKS[s]}</span>`;
+    if (mins !== null) {
+      const range = dayTimeRange(state.byDay.get(d));
+      label += ` ${durationLong(mins)}, ${range.open}~${range.close}`;
+      mark = `<span class="mark dur">${durationShort(mins)}</span>`;
+    }
+    html += `<button class="day ${s}${sel ? ' selected' : ''}" data-d="${d}" aria-label="${label}" aria-pressed="${sel}"${s === 'future' ? ' disabled' : ''}><span>${Number(d.slice(8))}</span>${mark}</button>`;
   }
   const grid = root.getElementById('grid');
   grid.innerHTML = html;
@@ -104,26 +110,67 @@ export function renderCalendar(root, state) {
   root.getElementById('next').disabled = state.view >= state.today.slice(0, 7);
 }
 
-export function renderInfo(root, state) {
-  const d = state.selected;
+// 날짜 상세. 아래 정보 칸과 마우스 툴팁이 같이 쓴다
+export function dayDetail(state, d) {
   const streams = state.byDay.get(d) || [];
   const s = dayStatus(d, ctx(state));
   let body;
   if (streams.length) {
-    body = '<ul>' + streams.map((x) =>
-      `<li>${hm(x.openDate)}~${x.closeDate ? hm(x.closeDate) : '방송 중'} · ${esc(x.title)}${x.category ? ` <span class="muted">(${esc(x.category)})</span>` : ''}</li>`,
-    ).join('') + '</ul>';
+    body = '<ul>' + streams.map((x) => {
+      const time = x.closeDate
+        ? `<b>${hm(x.openDate)} ~ ${hm(x.closeDate)}</b> · ${durationLong(streamMinutes(x))}`
+        : `<b>${hm(x.openDate)} ~ 방송 중</b>`;
+      return `<li>${time}<br>${esc(x.title)}${x.category ? ` <span class="muted">(${esc(x.category)})</span>` : ''}</li>`;
+    }).join('') + '</ul>';
+    const total = dayMinutes(streams);
+    if (streams.length > 1 && total !== null) body += `<div class="muted">총 ${durationLong(total)}</div>`;
   } else if (s === 'off') body = '<div class="muted">휴방</div>';
   else if (s === 'pending') body = '<div class="muted">아직 방송 기록이 없어요.</div>';
   else if (s === 'unknown') body = '<div class="muted">아직 확인되지 않았어요. 다음 자동 확인 후 반영돼요.</div>';
   else body = '<div class="muted">기록을 시작하기 전이라 알 수 없어요.</div>';
-  root.getElementById('info').innerHTML = `<b>${d} (${DOW[dayOfWeek(d)]})</b>${body}`;
+  return `<b>${d} (${DOW[dayOfWeek(d)]})</b>${body}`;
+}
+
+export function renderInfo(root, state) {
+  root.getElementById('info').innerHTML = dayDetail(state, state.selected);
 }
 
 export function select(root, state, d) {
   state.selected = d;
+  hideTip(root);
   renderInfo(root, state);
   renderCalendar(root, state);
+  // 폰에선 상세 칸이 화면 아래에 있을 수 있어 보이도록 끌어온다
+  root.getElementById('info').scrollIntoView?.({ block: 'nearest', behavior: 'smooth' });
+}
+
+const hideTip = (root) => {
+  const tip = root.getElementById('tip');
+  tip.hidden = true;
+  delete tip.dataset.for;
+};
+
+// 마우스를 방송한 날 위에 올리면 상세를 툴팁으로 보여 준다. 터치는 누르기(정보 칸)로 충분해 제외.
+// 달력은 다시 그려지므로 grid에 한 번만 위임해서 건다
+export function bindHover(root, state) {
+  const grid = root.getElementById('grid');
+  const tip = root.getElementById('tip');
+  grid.addEventListener('pointerover', (e) => {
+    if (e.pointerType !== 'mouse') return;
+    const b = e.target.closest('button.day.on');
+    // 선택한 날은 아래 정보 칸에 이미 같은 내용이 있다
+    if (!b || b.dataset.d === state.selected) return hideTip(root);
+    if (tip.dataset.for === b.dataset.d) return;
+    tip.dataset.for = b.dataset.d;
+    tip.innerHTML = dayDetail(state, b.dataset.d);
+    tip.hidden = false;
+    const box = tip.parentElement.getBoundingClientRect();
+    const r = b.getBoundingClientRect();
+    const left = r.left - box.left + r.width / 2 - tip.offsetWidth / 2;
+    tip.style.left = `${Math.max(8, Math.min(left, box.width - tip.offsetWidth - 8))}px`;
+    tip.style.top = `${r.bottom - box.top + 6}px`;
+  });
+  grid.addEventListener('pointerleave', () => hideTip(root));
 }
 
 export function shiftMonth(root, state, n) {
@@ -153,6 +200,7 @@ export async function init(root = document, fetchImpl = fetch, now = Date.now())
     const state = createState(data, now);
     root.getElementById('prev').addEventListener('click', () => shiftMonth(root, state, -1));
     root.getElementById('next').addEventListener('click', () => shiftMonth(root, state, 1));
+    bindHover(root, state);
     renderAll(root, state);
     return state;
   } catch {
