@@ -151,13 +151,14 @@ describe('접근성', () => {
     expect(day('2026-10-01').getAttribute('aria-pressed')).toBe('true');
   });
 
-  it('지난 방송일 칸에는 방송 시간을 보여 주고 aria-label에 시간과 시각을 읽어 준다', () => {
+  it('지난 방송일 칸에는 방송 시간을 막대로 보여 주고 aria-label에 시간과 시각을 읽어 준다', () => {
     const data = { ...DATA, streams: [...DATA.streams, st('2026-10-01 20:00:00', '2026-10-02 01:30:00'), st('2026-10-03 10:00:00', '2026-10-03 12:00:00')] };
     mount(data, KST('2026-10-03 13:00:00'));
-    expect(day('2026-10-01').querySelector('.dur').textContent).toBe('5h30m');
+    expect(day('2026-10-01').querySelector('.bar i').style.width).toBe('46%');
+    expect(day('2026-10-01').textContent).toBe('1');
     expect(day('2026-10-01').getAttribute('aria-label')).toBe('10월 1일 방송 5시간 30분, 20:00~01:30');
     // 오늘은 오늘 카드가 맡으므로 칸에는 '방송'만
-    expect(day('2026-10-03').querySelector('.dur')).toBeNull();
+    expect(day('2026-10-03').querySelector('.bar')).toBeNull();
     expect(day('2026-10-03').textContent).toBe('3방송');
     expect(day('2026-10-03').getAttribute('aria-label')).toBe('10월 3일 방송');
   });
