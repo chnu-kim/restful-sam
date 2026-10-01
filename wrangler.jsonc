@@ -2,7 +2,7 @@
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "restful-sam",
   "main": "worker/index.js",
-  "compatibility_date": "2026-10-02",
+  "compatibility_date": "2026-10-01",
   "account_id": "fc7323801136ae087db0b88ab4d07b53",
   "workers_dev": true,
   // 정적 페이지. 업로드할 파일은 .assetsignore의 허용 목록으로 제한한다.
