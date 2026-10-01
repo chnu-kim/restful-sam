@@ -151,6 +151,18 @@ describe('접근성', () => {
     expect(day('2026-10-01').getAttribute('aria-pressed')).toBe('true');
   });
 
+  it('지난 방송일 칸에는 시작~종료 시각을 보여 주고 aria-label에도 읽어 준다', () => {
+    const data = { ...DATA, streams: [...DATA.streams, st('2026-10-01 20:00:00', '2026-10-02 01:30:00'), st('2026-10-03 10:00:00', '2026-10-03 12:00:00')] };
+    mount(data, KST('2026-10-03 13:00:00'));
+    expect(day('2026-10-01').className).toContain('timed');
+    expect(day('2026-10-01').querySelector('.time').textContent).toBe('20:00~01:30');
+    expect(day('2026-10-01').querySelector('.mark').textContent).toBe('방송');
+    expect(day('2026-10-01').getAttribute('aria-label')).toBe('10월 1일 방송 20:00~01:30');
+    // 오늘은 오늘 카드가 맡으므로 칸에는 시각을 넣지 않는다
+    expect(day('2026-10-03').querySelector('.time')).toBeNull();
+    expect(day('2026-10-03').getAttribute('aria-label')).toBe('10월 3일 방송');
+  });
+
   it('데이터를 불러오기 전에는 월 이동 버튼이 비활성이다', () => {
     expect($('#prev').disabled).toBe(true);
     expect($('#next').disabled).toBe(true);
@@ -211,7 +223,7 @@ describe('달력', () => {
     expect($('#next').disabled).toBe(true);
     shiftMonth(document, state, -1);
     expect($('#month').textContent).toBe('2026년 9월');
-    expect(day('2026-09-25').className).toBe('day on');
+    expect(day('2026-09-25').className).toBe('day on timed');
     expect(day('2026-09-24').className).toBe('day nodata');
     expect($('#prev').disabled).toBe(true);
     expect($('#next').disabled).toBe(false);
