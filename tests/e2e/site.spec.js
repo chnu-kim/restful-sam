@@ -80,17 +80,22 @@ test('자정을 넘겨 이어지는 방송은 오늘 카드에 방송 중으로 
   await expect(page.locator('#today .detail')).toHaveText('어제 23:00 시작 · 심야');
 });
 
-test('지난 방송일 칸의 시각은 넓은 화면에서만 보이고 좁은 화면에선 \'방송\'으로 표시', async ({ page }) => {
-  const data = { ...BASE, streams: [...BASE.streams, st('2026-10-01 07:55:00', '2026-10-01 16:17:00')] };
-  await page.setViewportSize({ width: 800, height: 900 });
-  await open(page, { data });
-  await expect(day(page, '2026-10-01').locator('.time')).toBeVisible();
-  await expect(day(page, '2026-10-01').locator('.time')).toHaveText('07:55~16:17');
-  await expect(day(page, '2026-10-01').locator('.mark')).toBeHidden();
-  await page.setViewportSize({ width: 375, height: 800 });
-  await expect(day(page, '2026-10-01').locator('.time')).toBeHidden();
-  await expect(day(page, '2026-10-01').locator('.mark')).toHaveText('방송');
-});
+// 가장 긴 표기(12h05m)가 좁은 폰에서도 칸 안에 들어가는지 폭별로 확인한다
+for (const width of [360, 414, 561, 640, 1024]) {
+  test(`${width}px에서 방송 시간이 칸을 넘치지 않는다`, async ({ page }) => {
+    const data = { ...BASE, streams: [...BASE.streams, st('2026-10-01 07:55:00', '2026-10-01 20:00:00')] };
+    await page.setViewportSize({ width, height: 900 });
+    await open(page, { data });
+    const dur = day(page, '2026-10-01').locator('.dur');
+    await expect(dur).toHaveText('12h05m');
+    const fits = await dur.evaluate((el) => {
+      const cell = el.parentElement.getBoundingClientRect();
+      const r = el.getBoundingClientRect();
+      return r.left >= cell.left && r.right <= cell.right - 2;
+    });
+    expect(fits).toBe(true);
+  });
+}
 
 test('수집이 멈추면 지연 안내와 미확인 표시', async ({ page }) => {
   await open(page, { now: '2026-10-06 12:00:00' });
@@ -121,7 +126,8 @@ test('날짜를 누르면 상세가 나오고, 선택이 바뀐다', async ({ pa
 
   await page.locator('#prev').click();
   await day(page, '2026-09-25').click();
-  await expect(page.locator('#info')).toContainText('08:49~15:24 · 포더킹2 (포 더 킹 2)');
+  await expect(page.locator('#info li')).toHaveText('08:49 ~ 15:24 · 6시간 35분포더킹2 (포 더 킹 2)');
+  await expect(page.locator('#info')).toBeInViewport();
   await expect(day(page, '2026-09-25')).toHaveClass(/selected/);
 
   await day(page, '2026-09-24').click();

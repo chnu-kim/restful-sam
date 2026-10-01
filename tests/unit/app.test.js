@@ -2,7 +2,7 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { createState, init, renderAll, renderError, select, shiftMonth } from '../../src/app.js';
+import { bindHover, createState, init, renderAll, renderError, select, shiftMonth } from '../../src/app.js';
 
 // 실제 index.html의 마크업을 그대로 써서 id가 어긋나면 테스트가 깨지게 한다
 const MAIN = readFileSync(join(import.meta.dirname, '../../index.html'), 'utf8').match(/<main>[\s\S]*<\/main>/)[0];
@@ -151,16 +151,21 @@ describe('접근성', () => {
     expect(day('2026-10-01').getAttribute('aria-pressed')).toBe('true');
   });
 
-  it('지난 방송일 칸에는 시작~종료 시각을 보여 주고 aria-label에도 읽어 준다', () => {
+  it('지난 방송일 칸에는 방송 시간을 보여 주고 aria-label에 시간과 시각을 읽어 준다', () => {
     const data = { ...DATA, streams: [...DATA.streams, st('2026-10-01 20:00:00', '2026-10-02 01:30:00'), st('2026-10-03 10:00:00', '2026-10-03 12:00:00')] };
     mount(data, KST('2026-10-03 13:00:00'));
-    expect(day('2026-10-01').className).toContain('timed');
-    expect(day('2026-10-01').querySelector('.time').textContent).toBe('20:00~01:30');
-    expect(day('2026-10-01').querySelector('.mark').textContent).toBe('방송');
-    expect(day('2026-10-01').getAttribute('aria-label')).toBe('10월 1일 방송 20:00~01:30');
-    // 오늘은 오늘 카드가 맡으므로 칸에는 시각을 넣지 않는다
-    expect(day('2026-10-03').querySelector('.time')).toBeNull();
+    expect(day('2026-10-01').querySelector('.dur').textContent).toBe('5h30m');
+    expect(day('2026-10-01').getAttribute('aria-label')).toBe('10월 1일 방송 5시간 30분, 20:00~01:30');
+    // 오늘은 오늘 카드가 맡으므로 칸에는 '방송'만
+    expect(day('2026-10-03').querySelector('.dur')).toBeNull();
+    expect(day('2026-10-03').textContent).toBe('3방송');
     expect(day('2026-10-03').getAttribute('aria-label')).toBe('10월 3일 방송');
+  });
+
+  it('끝나지 않은 방송이 남은 지난 날은 시간을 지어내지 않고 \'방송\'으로 둔다', () => {
+    mount({ ...DATA, streams: [st('2026-10-01 20:00:00', null)] }, KST('2026-10-03 13:00:00'));
+    expect(day('2026-10-01').textContent).toBe('1방송');
+    expect(day('2026-10-01').getAttribute('aria-label')).toBe('10월 1일 방송');
   });
 
   it('데이터를 불러오기 전에는 월 이동 버튼이 비활성이다', () => {
@@ -223,7 +228,7 @@ describe('달력', () => {
     expect($('#next').disabled).toBe(true);
     shiftMonth(document, state, -1);
     expect($('#month').textContent).toBe('2026년 9월');
-    expect(day('2026-09-25').className).toBe('day on timed');
+    expect(day('2026-09-25').className).toBe('day on');
     expect(day('2026-09-24').className).toBe('day nodata');
     expect($('#prev').disabled).toBe(true);
     expect($('#next').disabled).toBe(false);
@@ -240,7 +245,7 @@ describe('달력', () => {
   it.each([
     ['2026-10-02', '2026-10-02 (금)아직 방송 기록이 없어요.'],
     ['2026-09-24', '2026-09-24 (목)기록을 시작하기 전이라 알 수 없어요.'],
-    ['2026-09-25', '2026-09-25 (금)08:49~15:24 · 포더킹2 (포 더 킹 2)'],
+    ['2026-09-25', '2026-09-25 (금)08:49 ~ 15:24 · 6시간 35분포더킹2 (포 더 킹 2)'],
   ])('%s 상세', (d, text) => {
     const state = mount(DATA, KST('2026-10-02 12:00:00'));
     select(document, state, d);
@@ -251,8 +256,68 @@ describe('달력', () => {
     const data = { ...DATA, live: true, streams: [st('2026-10-02 20:00:00', null, '<b>x</b>')] };
     const state = mount(data, KST('2026-10-02 21:00:00'));
     select(document, state, '2026-10-02');
-    expect($('#info li').textContent).toBe('20:00~방송 중 · <b>x</b>');
-    expect($('#info b + ul b')).toBeNull();
+    expect($('#info li').textContent).toBe('20:00 ~ 방송 중<b>x</b>');
+    expect(document.querySelectorAll('#info li b')).toHaveLength(1);
+  });
+
+  it('하루 여러 방송이면 각각의 시간과 합계', () => {
+    const data = { ...DATA, streams: [st('2026-10-01 10:00:00', '2026-10-01 12:00:00', '아침'), st('2026-10-01 23:00:00', '2026-10-02 02:10:00', '심야')] };
+    const state = mount(data, KST('2026-10-02 12:00:00'));
+    select(document, state, '2026-10-01');
+    expect([...document.querySelectorAll('#info li')].map((e) => e.textContent)).toEqual(['10:00 ~ 12:00 · 2시간아침', '23:00 ~ 02:10 · 3시간 10분심야']);
+    expect($('#info > .muted').textContent).toBe('총 5시간 10분');
+  });
+
+  it('누르면 상세 칸을 화면 안으로 끌어온다', () => {
+    const state = mount(DATA, KST('2026-10-02 12:00:00'));
+    const spy = vi.fn();
+    $('#info').scrollIntoView = spy;
+    select(document, state, '2026-10-01');
+    expect(spy).toHaveBeenCalledWith({ block: 'nearest', behavior: 'smooth' });
+  });
+});
+
+describe('마우스 툴팁', () => {
+  const hover = (el, pointerType = 'mouse') => {
+    const e = new MouseEvent('pointerover', { bubbles: true });
+    Object.defineProperty(e, 'pointerType', { value: pointerType });
+    el.dispatchEvent(e);
+  };
+  const setup = () => {
+    const state = mount(DATA, KST('2026-10-02 12:00:00'));
+    bindHover(document, state);
+    shiftMonth(document, state, -1);
+    return state;
+  };
+
+  it('마우스를 방송한 날에 올리면 상세를 보여 주고, 벗어나면 숨긴다', () => {
+    setup();
+    hover(day('2026-09-25').firstChild);
+    expect($('#tip').hidden).toBe(false);
+    expect($('#tip').textContent).toBe('2026-09-25 (금)08:49 ~ 15:24 · 6시간 35분포더킹2 (포 더 킹 2)');
+    expect($('#tip').style.left).toBe('8px');
+    hover(day('2026-09-25')); // 같은 칸 안에서 움직이면 그대로
+    expect($('#tip').hidden).toBe(false);
+    hover(day('2026-09-24'));
+    expect($('#tip').hidden).toBe(true);
+    hover(day('2026-09-25'));
+    $('#grid').dispatchEvent(new MouseEvent('pointerleave'));
+    expect($('#tip').hidden).toBe(true);
+  });
+
+  it('터치는 툴팁 없이 누르기로만 본다', () => {
+    setup();
+    hover(day('2026-09-25'), 'touch');
+    expect($('#tip').hidden).toBe(true);
+  });
+
+  it('누르면 툴팁을 닫고, 선택한 날에는 다시 띄우지 않는다', () => {
+    setup();
+    hover(day('2026-09-25'));
+    day('2026-09-25').click();
+    expect($('#tip').hidden).toBe(true);
+    hover(day('2026-09-25'));
+    expect($('#tip').hidden).toBe(true);
   });
 });
 
