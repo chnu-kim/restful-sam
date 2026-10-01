@@ -1,0 +1,36 @@
+name: 옛 주소 리다이렉트
+
+# GitHub Pages(옛 주소)를 Cloudflare의 새 주소로 넘겨 주는 페이지로 바꾼다. 이전할 때 한 번만 실행한다
+on: workflow_dispatch
+
+permissions:
+  pages: write
+  id-token: write
+
+jobs:
+  redirect:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - run: |
+          mkdir site
+          cat > site/index.html <<'HTML'
+          <!doctype html>
+          <html lang="ko">
+          <meta charset="utf-8">
+          <meta name="viewport" content="width=device-width, initial-scale=1">
+          <title>삼덕이 휴방 체크 (주소 이전)</title>
+          <meta http-equiv="refresh" content="0; url=https://restful-sam.chanwoos-account.workers.dev/">
+          <link rel="canonical" href="https://restful-sam.chanwoos-account.workers.dev/">
+          <p>주소가 바뀌었어요. <a href="https://restful-sam.chanwoos-account.workers.dev/">새 주소로 이동</a></p>
+          </html>
+          HTML
+          cp site/index.html site/404.html
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+      - id: deployment
+        uses: actions/deploy-pages@v4

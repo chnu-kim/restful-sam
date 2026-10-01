@@ -1,11 +1,8 @@
-import { mkdtemp, readFile, writeFile, rm, mkdir } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import {
   CHANNEL_ID, DEFAULT_API_URL, DEFAULT_SERVICE_BASE, MAX_DETAIL_CALLS, applyLiveStatus, backfillFromReplays, emptyData,
-  fetchLiveStatus, formatKst, loadData, parseKst, run, todayKst,
-} from '../../scripts/lib.mjs';
+  fetchLiveStatus, formatKst, parseKst, todayKst, validateData,
+} from '../../worker/collect.js';
 
 const CLOSED = {
   status: 'CLOSE',
@@ -75,47 +72,14 @@ describe('fetchLiveStatus', () => {
   });
 });
 
-describe('loadData', () => {
-  let dir;
-  beforeEach(async () => {
-    dir = await mkdtemp(join(tmpdir(), 'sam-'));
-  });
-  afterEach(async () => {
-    await rm(dir, { recursive: true, force: true });
+describe('validateData', () => {
+  it('형식이 맞으면 그대로 돌려준다', () => {
+    const d = emptyData('2026-10-01');
+    expect(validateData(d)).toBe(d);
   });
 
-  it('파일이 없으면 오늘부터 기록하는 빈 데이터를 만든다', async () => {
-    await expect(loadData(join(dir, 'none.json'), '2026-10-02')).resolves.toEqual(emptyData('2026-10-02'));
-    expect(emptyData('2026-10-02')).toMatchObject({ channelId: CHANNEL_ID, since: '2026-10-02', streams: [] });
-  });
-
-  it('기존 파일을 읽는다', async () => {
-    const p = join(dir, 's.json');
-    const data = { ...emptyData('2026-10-01'), streams: [{ openDate: '2026-10-01 10:00:00' }] };
-    await writeFile(p, JSON.stringify(data));
-    await expect(loadData(p, '2026-10-02')).resolves.toEqual(data);
-  });
-
-  it('깨진 JSON이면 throw한다', async () => {
-    const p = join(dir, 's.json');
-    await writeFile(p, '{ broken');
-    await expect(loadData(p, '2026-10-02')).rejects.toThrow(SyntaxError);
-  });
-
-  it.each([
-    ['null', 'null'],
-    ['streams 누락', '{"since":"2026-10-01"}'],
-    ['since 누락', '{"streams":[]}'],
-  ])('형식이 잘못되면 throw한다 (%s)', async (_, text) => {
-    const p = join(dir, 's.json');
-    await writeFile(p, text);
-    await expect(loadData(p, '2026-10-02')).rejects.toThrow('형식');
-  });
-
-  it('ENOENT 외의 읽기 오류는 전파한다', async () => {
-    const p = join(dir, 'adir');
-    await mkdir(p);
-    await expect(loadData(p, '2026-10-02')).rejects.toMatchObject({ code: 'EISDIR' });
+  it.each([null, {}, { streams: [] }, { streams: 'x', since: '2026-10-01' }])('형식이 아니면 throw한다: %j', (d) => {
+    expect(() => validateData(d)).toThrow('형식');
   });
 });
 
@@ -138,7 +102,7 @@ describe('applyLiveStatus', () => {
     expect(next.streams[0].closeDate).toBeNull();
   });
 
-  it('방송이 끝나면 확인 시각을 지운다 (매시간 커밋 방지)', () => {
+  it('방송이 끝나면 확인 시각을 지운다', () => {
     const live = applyLiveStatus(base, OPEN, '2026-10-02', '2026-10-02T11:07:00.000Z');
     const closed = applyLiveStatus(live, { ...OPEN, status: 'CLOSE' }, '2026-10-02', '2026-10-02T12:07:00.000Z');
     expect(closed).not.toHaveProperty('liveCheckedAt');
@@ -162,6 +126,17 @@ describe('applyLiveStatus', () => {
     ]);
     expect(a.streams[0]).not.toHaveProperty('ended'); // 원본은 그대로
     expect(applyLiveStatus(b, { ...OPEN, openDate: '2026-10-02 20:15:00', liveTitle: 'B' }, '2026-10-02')).toEqual(b);
+  });
+
+  it('방송 중이면 마지막으로 본 시각(seenAt)을 남기고, 다음 방송에 밀리면 그 시각을 종료 시각으로 추정한다', () => {
+    const a = applyLiveStatus(base, OPEN, '2026-10-02', '2026-10-02T11:09:00.000Z'); // 20:09 KST에 A 방송 중
+    expect(a.streams[0].seenAt).toBe('2026-10-02 20:09:00');
+    const b = applyLiveStatus(a, { ...OPEN, openDate: '2026-10-02 20:15:00', liveTitle: 'B' }, '2026-10-02', '2026-10-02T11:16:00.000Z');
+    expect(b.streams[0]).toEqual({ openDate: OPEN.openDate, closeDate: '2026-10-02 20:09:00', title: '저챗', category: 'talk', closeApprox: true });
+    expect(b.streams[1].seenAt).toBe('2026-10-02 20:16:00');
+    // 방송이 정상 종료로 잡히면 seenAt 없이 정확한 종료 시각으로 바뀐다
+    const c = applyLiveStatus(b, { ...OPEN, status: 'CLOSE', openDate: '2026-10-02 20:15:00', closeDate: '2026-10-02 23:00:00', liveTitle: 'B' }, '2026-10-02', '2026-10-02T14:01:00.000Z');
+    expect(c.streams[1]).toEqual({ openDate: '2026-10-02 20:15:00', closeDate: '2026-10-02 23:00:00', title: 'B', category: 'talk' });
   });
 
   it('새 방송은 추가되고 시작 시각 순으로 정렬된다', () => {
@@ -250,6 +225,20 @@ describe('backfillFromReplays', () => {
     expect(await backfillFromReplays(known, { fetchImpl: f, serviceBase: BASE })).toBe(known);
   });
 
+  it('아는 방송과 시작이 30분 이내라도 길이가 다르면 다른 방송이라 상세로 확인해 추가한다', async () => {
+    // 9/25 08:49~15:24 방송(6시간 35분) 직전에 10분짜리 방송이 있었던 경우
+    const f = replayFetch([replay(3, '2026-09-25 08:40:00', 600)], { 3: { liveOpenDate: '2026-09-25 08:30:00' } });
+    const next = await backfillFromReplays(known, { fetchImpl: f, serviceBase: BASE });
+    expect(next.streams.map((x) => x.openDate)).toEqual(['2026-09-25 08:30:00', '2026-09-25 08:49:35']);
+  });
+
+  it('아직 방송 중인 방송 근처의 다시보기는 그 방송일 수 없어 상세로 확인한다', async () => {
+    const live = { ...known, streams: [{ openDate: '2026-10-02 20:15:00', closeDate: null, title: 'B', category: null }] };
+    const f = replayFetch([replay(1, '2026-10-02 20:10:30', 600)], { 1: { liveOpenDate: '2026-10-02 20:00:00' } });
+    const next = await backfillFromReplays(live, { fetchImpl: f, serviceBase: BASE });
+    expect(next.streams.map((x) => x.openDate)).toEqual(['2026-10-02 20:00:00', '2026-10-02 20:15:00']);
+  });
+
   it('추정이 30분 넘게 어긋나도 상세의 시작 시각이 같으면 추가하지 않는다', async () => {
     const f = replayFetch([replay(2, '2026-09-25 16:30:00', 23687)], { 2: { liveOpenDate: '2026-09-25 08:49:35' } });
     const next = await backfillFromReplays(known, { fetchImpl: f, serviceBase: BASE });
@@ -287,6 +276,14 @@ describe('backfillFromReplays', () => {
       const f = replayFetch([replay(2, '2026-10-02 23:00:00', 9900)], { 2: { liveOpenDate: '2026-10-02 20:15:00' } });
       expect(await backfillFromReplays(data, { fetchImpl: f, serviceBase: BASE })).toBe(data);
       expect(f).toHaveBeenCalledTimes(2); // A 근처라 상세는 확인한다
+    });
+
+    it('추정 종료 시각(closeApprox)도 다시보기가 있으면 정확한 값으로 고친다', async () => {
+      const approx = { ...data, streams: [{ ...data.streams[0], ended: undefined, closeDate: '2026-10-02 20:09:00', closeApprox: true }, data.streams[1]] };
+      delete approx.streams[0].ended;
+      const f = replayFetch([replay(1, '2026-10-02 20:10:30', 600)], { 1: { liveOpenDate: '2026-10-02 20:00:00' } });
+      const next = await backfillFromReplays(approx, { fetchImpl: f, serviceBase: BASE });
+      expect(next.streams[0]).toEqual({ openDate: '2026-10-02 20:00:00', closeDate: '2026-10-02 20:10:00', title: 'A', category: null });
     });
 
     it('다시보기가 아직 없으면 그대로 둔다', async () => {
@@ -333,85 +330,5 @@ describe('backfillFromReplays', () => {
     const f = replayFetch([]);
     await backfillFromReplays(known, { fetchImpl: f });
     expect(f.mock.calls[0][0].startsWith(DEFAULT_SERVICE_BASE)).toBe(true);
-  });
-});
-
-describe('run', () => {
-  let dir, path;
-  const now = Date.parse('2026-10-02T03:00:00Z');
-  beforeEach(async () => {
-    dir = await mkdtemp(join(tmpdir(), 'sam-'));
-    path = join(dir, 'streams.json');
-  });
-  afterEach(async () => {
-    await rm(dir, { recursive: true, force: true });
-  });
-
-  it('파일이 없으면 만들고, 다시 실행하면 변경 없음', async () => {
-    const log = vi.fn();
-    const first = await run({ fetchImpl: okFetch(CLOSED), dataPath: path, now, log });
-    expect(first.changed).toBe(true);
-    expect(log).toHaveBeenLastCalledWith(`갱신됨: status=CLOSE, openDate=${CLOSED.openDate}`);
-    const saved = await readFile(path, 'utf8');
-    expect(saved.endsWith('\n')).toBe(true);
-    expect(JSON.parse(saved)).toEqual(first.data);
-    expect(first.data.since).toBe('2026-10-02');
-    expect(first.data).not.toHaveProperty('liveCheckedAt');
-
-    const second = await run({ fetchImpl: okFetch(CLOSED), dataPath: path, now, log });
-    expect(second.changed).toBe(false);
-    expect(log).toHaveBeenLastCalledWith(`변경 없음: status=CLOSE, openDate=${CLOSED.openDate}`);
-    expect(await readFile(path, 'utf8')).toBe(saved);
-  });
-
-  it('조회에 실패하면 파일을 건드리지 않는다', async () => {
-    await writeFile(path, 'original');
-    const f = vi.fn(async () => new Response('', { status: 503 }));
-    await expect(run({ fetchImpl: f, dataPath: path, now, log: vi.fn() })).rejects.toThrow('503');
-    expect(await readFile(path, 'utf8')).toBe('original');
-  });
-
-  it('데이터 파일이 깨져 있으면 덮어쓰지 않는다', async () => {
-    await writeFile(path, '{ broken');
-    await expect(run({ fetchImpl: okFetch(CLOSED), dataPath: path, now, log: vi.fn() })).rejects.toThrow();
-    expect(await readFile(path, 'utf8')).toBe('{ broken');
-  });
-
-  it('다시보기 보충이 실패해도 경고만 남기고 live-status 결과는 저장한다', async () => {
-    const warn = vi.fn();
-    const f = vi.fn(async (url) => (url.includes('/videos') ? new Response('', { status: 503 }) : jsonResponse({ code: 200, content: CLOSED })));
-    const r = await run({ fetchImpl: f, serviceBase: BASE, dataPath: path, now, log: vi.fn(), warn });
-    expect(r.changed).toBe(true);
-    expect(warn).toHaveBeenCalledWith('다시보기 보충 실패: videos HTTP 503');
-    expect(JSON.parse(await readFile(path, 'utf8')).streams).toHaveLength(1);
-  });
-
-  it('방송 중이면 실행 시각을 liveCheckedAt으로 저장한다', async () => {
-    const r = await run({ fetchImpl: okFetch(OPEN), serviceBase: BASE, dataPath: path, now, log: vi.fn(), warn: vi.fn() });
-    expect(r.data.liveCheckedAt).toBe(new Date(now).toISOString());
-  });
-
-  it('다시보기로 놓친 방송을 보충해 저장한다', async () => {
-    const f = vi.fn(async (url) => {
-      if (url.includes('/videos?')) return jsonResponse({ code: 200, content: { data: [replay(1, '2026-09-24 16:23:02', 30092)] } });
-      if (url.includes('/v3/videos/1')) return jsonResponse({ code: 200, content: { liveOpenDate: '2026-09-24 07:55:37' } });
-      return jsonResponse({ code: 200, content: CLOSED });
-    });
-    const r = await run({ fetchImpl: f, serviceBase: BASE, dataPath: path, now, log: vi.fn() });
-    expect(r.data.streams.map((x) => x.openDate)).toEqual(['2026-09-24 07:55:37', CLOSED.openDate]);
-  });
-
-  it('기본값으로 전역 fetch와 console.log·console.warn을 쓴다', async () => {
-    const spyFetch = vi.spyOn(globalThis, 'fetch').mockImplementation(async (url) =>
-      url === DEFAULT_API_URL ? jsonResponse({ code: 200, content: CLOSED }) : new Response('', { status: 500 }),
-    );
-    const spyLog = vi.spyOn(console, 'log').mockImplementation(() => {});
-    const spyWarn = vi.spyOn(console, 'warn').mockImplementation(() => {});
-    await run({ dataPath: path });
-    expect(spyFetch).toHaveBeenCalledWith(DEFAULT_API_URL, expect.anything());
-    expect(spyFetch.mock.calls[1][0].startsWith(DEFAULT_SERVICE_BASE)).toBe(true);
-    expect(spyWarn).toHaveBeenCalledWith('다시보기 보충 실패: videos HTTP 500');
-    expect(spyLog).toHaveBeenCalled();
-    vi.restoreAllMocks();
   });
 });

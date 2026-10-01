@@ -1,11 +1,9 @@
-// 치지직 live-status 수집 로직. 부수효과(fetch, 파일 IO, 현재 시각)는 모두 주입받는다.
-import { readFile, writeFile } from 'node:fs/promises';
+// 치지직 live-status 수집 로직 (Cloudflare Worker에서 1분마다 실행). 부수효과(fetch, 현재 시각)는 주입받는다.
 
 export const CHANNEL_ID = '86d3d8d5997609df783949d107fbde24';
 export const DEFAULT_API_URL = `https://api.chzzk.naver.com/polling/v2/channels/${CHANNEL_ID}/live-status`;
-// 다시보기 보충용 (CHZZK_SERVICE_BASE로 교체 가능)
+// 다시보기 보충용
 export const DEFAULT_SERVICE_BASE = 'https://api.chzzk.naver.com/service';
-export const DEFAULT_DATA_PATH = new URL('../data/streams.json', import.meta.url);
 
 const USER_AGENT =
   'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0 Safari/537.36';
@@ -38,18 +36,10 @@ export function emptyData(today) {
   return { channelId: CHANNEL_ID, since: today, checkedDays: [], live: false, streams: [] };
 }
 
-// 파일이 없을 때만 새로 만든다. 깨진 JSON은 덮어쓰지 않도록 그대로 throw한다.
-export async function loadData(path, today) {
-  let text;
-  try {
-    text = await readFile(path, 'utf8');
-  } catch (e) {
-    if (e.code !== 'ENOENT') throw e;
-    return emptyData(today);
-  }
-  const data = JSON.parse(text);
+// 저장된 문서가 수집 결과로 덮어써도 되는 형식인지 확인한다. 깨진 데이터는 덮어쓰지 않도록 throw한다
+export function validateData(data) {
   if (!data || !Array.isArray(data.streams) || typeof data.since !== 'string') {
-    throw new Error('streams.json 형식이 올바르지 않습니다');
+    throw new Error('streams 문서 형식이 올바르지 않습니다');
   }
   return data;
 }
@@ -63,14 +53,14 @@ function normalize(data) {
 
 const sortStreams = (streams) => streams.sort((a, b) => a.openDate.localeCompare(b.openDate));
 
-// checkedAt: 이번 수집 시각(ISO). 방송 중일 때만 남겨 페이지가 live 값의 신선도를 판단하게 한다
-// (방송 중이 아닐 땐 남기지 않아 매시간 커밋이 생기지 않는다)
+// checkedAt: 이번 수집 시각(ISO). 방송 중일 때만 남겨 페이지가 live 값의 신선도를 판단하게 한다.
+// 방송 중인 방송에는 마지막으로 방송 중인 걸 본 시각(seenAt, KST)을 남겨, 종료를 놓쳤을 때 종료 시각 추정에 쓴다
 export function applyLiveStatus(data, live, today, checkedAt = null) {
   const isLive = live.status === 'OPEN';
   const { liveCheckedAt, ...rest } = normalize(data);
   const next = { ...rest, live: isLive, streams: [...data.streams] };
   if (isLive && checkedAt) next.liveCheckedAt = checkedAt;
-  // 수집에 성공한 날을 남긴다. d의 휴방은 d+1에 수집이 있어야 확정된다 (하루 한 번 커밋도 생겨 schedule 비활성 중지 방지)
+  // 수집에 성공한 날을 남긴다. d의 휴방은 d+1에 수집이 있어야 확정된다
   if (!next.checkedDays.includes(today)) next.checkedDays.push(today);
 
   if (live.openDate) {
@@ -80,14 +70,18 @@ export function applyLiveStatus(data, live, today, checkedAt = null) {
       title: live.liveTitle ?? '',
       category: live.liveCategoryValue || null,
     };
+    if (isLive && checkedAt) stream.seenAt = formatKst(Date.parse(checkedAt));
     const idx = next.streams.findIndex((s) => s.openDate === stream.openDate);
     if (idx === -1) next.streams.push(stream);
     else next.streams[idx] = stream;
-    // live-status는 마지막 방송만 알려준다. 그보다 먼저 시작해 아직 열려 있는 방송은 두 확인 사이에 끝난 것이므로
-    // 끝났다고(ended) 표시하고, 종료 시각은 다시보기 보충에서 채운다
-    next.streams = next.streams.map((s) =>
-      !s.closeDate && !s.ended && s.openDate < stream.openDate ? { ...s, ended: true } : s,
-    );
+    // live-status는 마지막 방송만 알려준다. 그보다 먼저 시작해 아직 열려 있는 방송은 두 확인 사이에 끝난 것이다.
+    // 마지막으로 본 시각(seenAt)을 종료 시각으로 추정(closeApprox)하고, 본 기록이 없으면 끝났다고(ended)만 표시한다.
+    // 다시보기가 남아 있으면 보충에서 정확한 값으로 고친다
+    next.streams = next.streams.map((s) => {
+      if (s.closeDate || s.ended || s.openDate >= stream.openDate) return s;
+      const { seenAt, ...other } = s;
+      return seenAt ? { ...other, closeDate: seenAt, closeApprox: true } : { ...other, ended: true };
+    });
     sortStreams(next.streams);
   }
   return next;
@@ -100,18 +94,24 @@ const SAME_STREAM_MS = 2 * 60 * 1000;
 const closest = (times, t) =>
   times.filter((x) => Math.abs(x - t) <= SAME_STREAM_MS).sort((a, b) => Math.abs(a - t) - Math.abs(b - t))[0];
 export const MAX_DETAIL_CALLS = 3;
+// 다시보기 길이와 기록된 방송 길이가 이만큼 이내면 같은 방송의 다시보기로 본다
+const SAME_DURATION_MS = 5 * 60 * 1000;
 
-// live-status는 마지막 방송만 알려주므로, 놓친 방송과 끝났는데 종료 시각을 모르는 방송(ended)을 다시보기로 보충한다.
-// 이미 아는 방송(추정 시작 시각 ±30분)은 건너뛰되, 종료 시각을 채워야 하는 방송 근처면 상세의 정확한 시작 시각으로 맞춘다.
-// 그 외 기존 항목은 덮어쓰지 않는다
+// 종료 시각이 정확하지 않은 방송: 끝났는데 종료 시각을 모르거나(ended) 추정값(closeApprox)인 방송
+const needsClose = (s) => (s.ended && !s.closeDate) || s.closeApprox;
+
+// 다시보기는 남지 않을 수도 있어 보조 수단이다. 있으면 놓친 방송을 추가하고, 종료 시각이 정확하지 않은 방송을 고친다.
+// 시작 시각 추정(올린 시각 - 길이)이 아는 방송과 ±30분 이내이고 길이도 비슷하면 같은 방송으로 보고 건너뛴다.
+// 그 외(길이가 다르거나 아는 방송이 아직 열려 있거나 고칠 방송 근처)는 상세의 정확한 시작 시각으로 판단한다
 export async function backfillFromReplays(data, { fetchImpl = fetch, serviceBase = DEFAULT_SERVICE_BASE } = {}) {
   const list = await fetchContent(
     fetchImpl,
     `${serviceBase}/v1/channels/${CHANNEL_ID}/videos?sortType=LATEST&pagingType=PAGE&page=0&size=10`,
     'videos',
   );
-  const known = data.streams.map((s) => parseKst(s.openDate));
-  const pending = data.streams.filter((s) => s.ended && !s.closeDate).map((s) => parseKst(s.openDate));
+  const span = (s) => (s.closeDate && !needsClose(s) ? parseKst(s.closeDate) - parseKst(s.openDate) : null);
+  const known = data.streams.map((s) => ({ t: parseKst(s.openDate), span: span(s) }));
+  const pending = data.streams.filter(needsClose).map((s) => parseKst(s.openDate));
   const added = [];
   const closed = new Map(); // 저장된 시작 시각(ms) -> 채울 종료 시각
   let calls = 0;
@@ -119,7 +119,8 @@ export async function backfillFromReplays(data, { fetchImpl = fetch, serviceBase
     if (v.videoType !== 'REPLAY' || !v.publishDate || !v.duration) continue;
     const estimated = parseKst(v.publishDate) - v.duration * 1000;
     const near = (t) => Math.abs(t - estimated) <= MATCH_WINDOW_MS;
-    if (known.some(near) && !pending.some(near)) continue;
+    const sameKnown = known.some((k) => near(k.t) && k.span !== null && Math.abs(k.span - v.duration * 1000) <= SAME_DURATION_MS);
+    if (sameKnown && !pending.some(near)) continue;
     if (calls >= MAX_DETAIL_CALLS) break;
     calls++;
     const detail = await fetchContent(fetchImpl, `${serviceBase}/v3/videos/${v.videoNo}`, 'video');
@@ -133,42 +134,16 @@ export async function backfillFromReplays(data, { fetchImpl = fetch, serviceBase
       pending.splice(pending.indexOf(match), 1);
       continue;
     }
-    if (closest(known, t) !== undefined) continue;
+    if (closest(known.map((k) => k.t), t) !== undefined) continue;
     added.push({ openDate, closeDate, title: v.videoTitle ?? '', category: v.videoCategoryValue || null });
-    known.push(t);
+    known.push({ t, span: v.duration * 1000 });
   }
   if (!added.length && !closed.size) return data;
   const streams = data.streams.map((s) => {
     const closeDate = closed.get(parseKst(s.openDate));
     if (!closeDate) return s;
-    const { ended, ...rest } = s;
+    const { ended, closeApprox, seenAt, ...rest } = s;
     return { ...rest, closeDate };
   });
   return { ...data, streams: sortStreams([...streams, ...added]) };
-}
-
-export async function run({
-  fetchImpl = fetch,
-  apiUrl = DEFAULT_API_URL,
-  serviceBase = DEFAULT_SERVICE_BASE,
-  dataPath = DEFAULT_DATA_PATH,
-  now = Date.now(),
-  log = console.log,
-  warn = console.warn,
-} = {}) {
-  const today = todayKst(now);
-  // 조회를 먼저 해서, 실패하면 파일을 건드리지 않는다
-  const live = await fetchLiveStatus(fetchImpl, apiUrl);
-  const data = await loadData(dataPath, today);
-  let next = applyLiveStatus(data, live, today, new Date(now).toISOString());
-  try {
-    next = await backfillFromReplays(next, { fetchImpl, serviceBase });
-  } catch (e) {
-    // 보충은 부가 기능이라 실패해도 live-status 결과는 저장한다
-    warn(`다시보기 보충 실패: ${e.message}`);
-  }
-  const changed = JSON.stringify(next) !== JSON.stringify(data);
-  if (changed) await writeFile(dataPath, JSON.stringify(next, null, 2) + '\n');
-  log(`${changed ? '갱신됨' : '변경 없음'}: status=${live.status}, openDate=${live.openDate}`);
-  return { changed, data: next };
 }

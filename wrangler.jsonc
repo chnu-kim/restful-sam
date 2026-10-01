@@ -1,0 +1,26 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "restful-sam",
+  "main": "worker/index.js",
+  "compatibility_date": "2026-09-01",
+  "account_id": "fc7323801136ae087db0b88ab4d07b53",
+  "workers_dev": true,
+  // 정적 페이지. 업로드할 파일은 .assetsignore의 허용 목록으로 제한한다.
+  // /data/*는 저장소의 백업 파일이 아니라 D1의 최신 기록을 내보내도록 Worker가 먼저 처리한다
+  "assets": {
+    "directory": ".",
+    "binding": "ASSETS",
+    "run_worker_first": ["/data/*"]
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "restful-sam",
+      "database_id": "8c6dc752-8fa2-4514-8a06-ff3bdf4acf0f",
+      "migrations_dir": "migrations"
+    }
+  ],
+  // 1분마다 방송 상태 수집
+  "triggers": { "crons": ["* * * * *"] },
+  "observability": { "enabled": true }
+}
