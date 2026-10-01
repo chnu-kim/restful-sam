@@ -371,76 +371,52 @@ describe('init', () => {
   });
 });
 
-describe('테마 선택', () => {
+describe('테마 버튼', () => {
   const fakeWindow = (storage = new Map()) => ({
     localStorage: { setItem: (k, v) => storage.set(k, v), removeItem: (k) => storage.delete(k) },
     storage,
   });
   const html = () => document.documentElement;
-  const item = (c) => $(`[data-choice="${c}"]`);
-  const checked = () => [...document.querySelectorAll('[data-choice]')].filter((b) => b.getAttribute('aria-checked') === 'true').map((b) => b.dataset.choice);
+  const label = () => $('#theme').getAttribute('aria-label');
 
   beforeEach(() => {
     delete html().dataset.theme;
   });
 
-  it('기본은 시스템이고, 메뉴에서 고르면 적용·저장하고 시스템을 고르면 저장을 지운다', () => {
+  it('기본은 시스템이고, 누를 때마다 라이트 → 다크 → 시스템으로 바뀌며 저장한다', () => {
     const win = fakeWindow();
     bindTheme(document, win);
-    expect($('#theme').getAttribute('aria-label')).toBe('테마: 시스템');
-    expect(checked()).toEqual(['system']);
+    expect(label()).toBe('테마: 시스템');
+    expect($('#theme').title).toBe('테마: 시스템');
 
     $('#theme').click();
-    expect($('#theme-menu').hidden).toBe(false);
-    expect($('#theme').getAttribute('aria-expanded')).toBe('true');
-    expect(document.activeElement).toBe(item('system'));
-    item('dark').click();
+    expect(html().dataset.theme).toBe('light');
+    expect(win.storage.get('theme')).toBe('light');
+    expect(label()).toBe('테마: 라이트');
+
+    $('#theme').click();
     expect(html().dataset.theme).toBe('dark');
     expect(win.storage.get('theme')).toBe('dark');
-    expect($('#theme-menu').hidden).toBe(true);
-    expect($('#theme').getAttribute('aria-label')).toBe('테마: 다크');
-    expect(checked()).toEqual(['dark']);
+    expect(label()).toBe('테마: 다크');
 
     $('#theme').click();
-    item('system').click();
     expect(html().dataset.theme).toBeUndefined();
     expect(win.storage.has('theme')).toBe(false);
-    expect(checked()).toEqual(['system']);
+    expect(label()).toBe('테마: 시스템');
   });
 
-  it('저장된 테마로 시작하면 그 항목이 선택돼 있다', () => {
-    html().dataset.theme = 'light';
+  it('저장된 테마로 시작하면 거기서부터 이어진다', () => {
+    html().dataset.theme = 'dark';
     bindTheme(document, fakeWindow());
-    expect($('#theme').getAttribute('aria-label')).toBe('테마: 라이트');
-    expect(checked()).toEqual(['light']);
-  });
-
-  it('메뉴 밖을 누르거나 Esc를 누르면 닫히고, 메뉴 안 빈 곳은 무시한다', () => {
-    bindTheme(document, fakeWindow());
+    expect(label()).toBe('테마: 다크');
     $('#theme').click();
-    $('#theme-menu').click();
-    expect($('#theme-menu').hidden).toBe(false);
-    $('#today').click();
-    expect($('#theme-menu').hidden).toBe(true);
-    $('#today').click(); // 닫힌 상태에선 그대로
-    expect($('#theme-menu').hidden).toBe(true);
-
-    $('#theme').click();
-    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter' }));
-    expect($('#theme-menu').hidden).toBe(false);
-    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
-    expect($('#theme-menu').hidden).toBe(true);
-    expect(document.activeElement).toBe($('#theme'));
-    $('#theme').click();
-    $('#theme').click(); // 다시 누르면 닫힘
-    expect($('#theme-menu').hidden).toBe(true);
+    expect(label()).toBe('테마: 시스템');
   });
 
   it('저장이 막혀도 화면 테마는 바뀐다', () => {
     const blocked = { localStorage: { setItem: () => { throw new Error('blocked'); } } };
     bindTheme(document, blocked);
     $('#theme').click();
-    item('dark').click();
-    expect(html().dataset.theme).toBe('dark');
+    expect(html().dataset.theme).toBe('light');
   });
 });
