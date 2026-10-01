@@ -2,19 +2,25 @@ import { describe, expect, it, vi } from 'vitest';
 import worker, { BACKFILL_EVERY_MIN, collect, loadDoc, saveDoc } from '../../worker/index.js';
 import { emptyData } from '../../worker/collect.js';
 
-// D1 스텁: docs 테이블 하나를 Map으로 흉내 낸다
+// D1 스텁: docs 테이블 하나를 Map으로 흉내 낸다. UPDATE는 WHERE value = ? 조건까지 지킨다
 function fakeDb(initial) {
   const rows = new Map(initial ? [['streams', JSON.stringify(initial)]] : []);
   const db = {
     rows,
     writes: 0,
+    // 읽은 직후 다른 실행이 끼어드는 상황을 흉내 낼 때 쓴다
+    beforeWrite: null,
     prepare: (sql) => ({
       bind: (...args) => ({
         first: async () => (rows.has(args[0]) ? { value: rows.get(args[0]) } : null),
         run: async () => {
-          expect(sql).toMatch(/^INSERT INTO docs/);
-          rows.set(args[0], args[1]);
+          expect(sql).toBe('UPDATE docs SET value = ? WHERE key = ? AND value = ?');
+          db.beforeWrite?.();
+          const [value, key, prev] = args;
+          if (rows.get(key) !== prev) return { meta: { changes: 0 } };
+          rows.set(key, value);
           db.writes++;
+          return { meta: { changes: 1 } };
         },
       }),
     }),
@@ -33,11 +39,18 @@ const chzzk = (live, { videos = { code: 200, content: { data: [] } }, videosStat
   vi.fn(async (url) => (url.includes('/videos') ? jsonResponse(videos, videosStatus) : jsonResponse({ code: 200, content: live })));
 
 describe('loadDoc / saveDoc', () => {
-  it('문서가 없으면 null, 저장하면 읽힌다', async () => {
-    const db = fakeDb();
-    expect(await loadDoc(db)).toBeNull();
-    await saveDoc(db, emptyData('2026-10-01'));
-    expect(await loadDoc(db)).toEqual(emptyData('2026-10-01'));
+  it('문서가 없으면 null, 있으면 원문과 함께 읽는다', async () => {
+    expect(await loadDoc(fakeDb())).toBeNull();
+    const d = emptyData('2026-10-01');
+    expect(await loadDoc(fakeDb(d))).toEqual({ raw: JSON.stringify(d), data: d });
+  });
+
+  it('읽은 뒤 바뀌지 않았을 때만 쓴다', async () => {
+    const db = fakeDb(emptyData('2026-10-01'));
+    const { raw } = await loadDoc(db);
+    expect(await saveDoc(db, emptyData('2026-10-02'), raw)).toBe(true);
+    expect(await saveDoc(db, emptyData('2026-10-03'), raw)).toBe(false); // raw가 이미 옛 값
+    expect((await loadDoc(db)).data.since).toBe('2026-10-02');
   });
 
   it('형식이 깨진 문서는 throw한다 (덮어쓰지 않도록)', async () => {
@@ -46,17 +59,34 @@ describe('loadDoc / saveDoc', () => {
 });
 
 describe('collect', () => {
-  it('문서가 없으면 오늘부터 만들고, 같은 결과면 다시 쓰지 않는다', async () => {
-    const env = { DB: fakeDb() };
+  it('바뀌었으면 쓰고, 같은 결과면 다시 쓰지 않는다', async () => {
+    const env = { DB: fakeDb(emptyData('2026-10-01')) };
     const log = vi.fn();
     const first = await collect(env, { fetchImpl: chzzk(CLOSED), now: NOW, log });
     expect(first.changed).toBe(true);
-    expect(first.data).toMatchObject({ since: '2026-10-02', checkedDays: ['2026-10-02'], live: false });
+    expect(first.data).toMatchObject({ since: '2026-10-01', checkedDays: ['2026-10-02'], live: false });
     expect(log).toHaveBeenLastCalledWith(`갱신됨: status=CLOSE, openDate=${CLOSED.openDate}`);
     const second = await collect(env, { fetchImpl: chzzk(CLOSED), now: NOW + 60000, log });
     expect(second.changed).toBe(false);
     expect(env.DB.writes).toBe(1);
     expect(log).toHaveBeenLastCalledWith(`변경 없음: status=CLOSE, openDate=${CLOSED.openDate}`);
+  });
+
+  it('D1에 기록이 없으면 빈 기록을 만들지 않고 실패한다 (지난 기록 보호)', async () => {
+    const env = { DB: fakeDb() };
+    await expect(collect(env, { fetchImpl: chzzk(CLOSED), now: NOW })).rejects.toThrow('시드');
+    expect(env.DB.rows.size).toBe(0);
+  });
+
+  it('읽은 뒤 다른 실행이 먼저 썼으면 이번 결과로 덮어쓰지 않는다', async () => {
+    const env = { DB: fakeDb(emptyData('2026-10-01')) };
+    const newer = JSON.stringify({ ...emptyData('2026-10-01'), checkedDays: ['2026-10-02'], live: true });
+    env.DB.beforeWrite = () => env.DB.rows.set('streams', newer);
+    const warn = vi.fn();
+    const r = await collect(env, { fetchImpl: chzzk(CLOSED), now: NOW, log: vi.fn(), warn });
+    expect(r.changed).toBe(false);
+    expect(env.DB.rows.get('streams')).toBe(newer);
+    expect(warn).toHaveBeenCalledWith('그 사이 다른 실행이 기록을 바꿔 이번 결과는 저장하지 않습니다');
   });
 
   it('방송 중이면 매번 확인 시각을 남긴다', async () => {
