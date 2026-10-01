@@ -43,11 +43,13 @@ export function dayStatus(d, { byDay, since, today }) {
 }
 
 // 이번 달(오늘이 속한 달) 1일부터 오늘까지의 방송·휴방 일수. 휴방률은 판정된 날이 없으면 null
+// 기록 시작 전 날짜는 방송 기록이 있어도 세지 않는다 (휴방 여부를 모르는 날과 같은 기준으로 맞춤)
 export function computeStats(ctx) {
   let on = 0;
   let off = 0;
   for (const d of monthDays(ctx.today.slice(0, 7))) {
     if (d > ctx.today) break;
+    if (d < ctx.since) continue;
     const s = dayStatus(d, ctx);
     if (s === 'on') on++;
     else if (s === 'off') off++;

@@ -100,8 +100,8 @@ describe('computeStats (이번 달) / currentStreak', () => {
     expect(computeStats(ctx)).toEqual({ on: 0, off: 0, offRate: null, streak: 6, streakKind: 'off' });
   });
 
-  it('기록 시작이 이번 달 중간이면 그 전 날짜는 세지 않는다', () => {
-    const ctx = ctxOf([], '2026-10-05', '2026-10-07');
+  it('기록 시작이 이번 달 중간이면 그 전 날짜는 방송 기록이 있어도 세지 않는다', () => {
+    const ctx = ctxOf([s('2026-10-01 10:00:00')], '2026-10-05', '2026-10-07');
     expect(computeStats(ctx)).toMatchObject({ on: 0, off: 2, offRate: 100 });
   });
 
