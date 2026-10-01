@@ -17,7 +17,22 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  # 코드가 바뀐 push는 테스트를 통과해야 수집(데이터 커밋)과 배포를 한다. schedule 경로는 npm ci 없이 가볍게 유지
+  verify:
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm test
+
   check:
+    needs: verify
+    if: ${{ !cancelled() && (needs.verify.result == 'success' || needs.verify.result == 'skipped') }}
     runs-on: ubuntu-latest
     outputs:
       changed: ${{ steps.commit.outputs.changed }}
@@ -41,24 +56,10 @@ jobs:
             echo "changed=true" >> "$GITHUB_OUTPUT"
           fi
 
-  # 코드가 바뀐 push는 테스트를 통과해야 배포한다. schedule 경로는 npm ci 없이 가볍게 유지
-  verify:
-    if: github.event_name == 'push'
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: npm
-      - run: npm ci
-      - run: npm test
-
   deploy:
-    needs: [check, verify]
+    needs: check
     if: >-
       !cancelled() && needs.check.result == 'success'
-      && (needs.verify.result == 'success' || needs.verify.result == 'skipped')
       && (needs.check.outputs.changed == 'true' || github.event_name != 'schedule')
     runs-on: ubuntu-latest
     environment:
