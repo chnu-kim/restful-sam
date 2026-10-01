@@ -9,15 +9,20 @@ const LABELS = { on: '방송', off: '휴방', pending: '아직 방송 전', unkn
 export function createState(data, now = Date.now()) {
   const today = todayKst(now);
   const ctx = makeContext(data, today);
-  return { data, today, ctx, byDay: ctx.byDay, lastChecked: data.checkedDays?.at(-1) ?? null, view: today.slice(0, 7), selected: null };
+  return { data, now, today, ctx, byDay: ctx.byDay, lastChecked: data.checkedDays?.at(-1) ?? null, view: today.slice(0, 7), selected: null };
 }
 
 const ctx = (state) => state.ctx;
 
+// 매시간 수집 + cron 지연 여유
+export const LIVE_FRESH_MS = 2 * 60 * 60 * 1000;
+
 // 자정을 넘긴 방송은 시작일(어제)에 속하므로 오늘 목록이 아니라 전체에서 열린 방송을 찾는다.
-// 수집이 멈춰 live가 남아 있을 수 있으니 어제 이후에 확인된 데이터일 때만 믿는다
+// 수집이 멈춰 live가 남아 있을 수 있으니 최근(2시간 이내)에 방송 중으로 확인된 경우만 믿는다
+const isLiveFresh = (state) => state.now - Date.parse(state.data.liveCheckedAt ?? '') <= LIVE_FRESH_MS;
+
 function findLiveStream(state) {
-  if (!state.data.live || !state.lastChecked || state.lastChecked < addDays(state.today, -1)) return null;
+  if (!state.data.live || !isLiveFresh(state)) return null;
   return state.data.streams.findLast((s) => !s.closeDate) ?? null;
 }
 
@@ -29,6 +34,9 @@ function startedAt(openDate, today) {
 }
 
 function staleNotice(state) {
+  if (state.data.live && !isLiveFresh(state)) {
+    return '<div class="stale">방송 중이었지만 최근 2시간 동안 상태를 확인하지 못해 최신 정보가 아닐 수 있어요.</div>';
+  }
   if (state.lastChecked && state.lastChecked >= addDays(state.today, -1)) return '';
   const when = state.lastChecked ? `마지막 자동 확인이 ${state.lastChecked}이라` : '자동 확인 기록이 없어';
   return `<div class="stale">${when} 최신 정보가 아닐 수 있어요.</div>`;

@@ -36,6 +36,7 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       changed: ${{ steps.commit.outputs.changed }}
+      sha: ${{ steps.commit.outputs.sha }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -44,16 +45,23 @@ jobs:
       - run: node scripts/check.mjs
       - id: commit
         run: |
+          # 배포는 이 실행에서 검증한 코드(+데이터 커밋)만 대상으로 한다
+          echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
           if git diff --quiet; then
             echo "changed=false" >> "$GITHUB_OUTPUT"
-          else
-            git config user.name "github-actions[bot]"
-            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-            git add data/streams.json
-            git commit -m "data: $(TZ=Asia/Seoul date '+%Y-%m-%d %H:%M') 방송 상태 갱신"
-            # 그 사이 main에 다른 push가 있었으면 한 번 rebase 후 재시도
-            git push || (git pull --rebase && git push)
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add data/streams.json
+          git commit -m "data: $(TZ=Asia/Seoul date '+%Y-%m-%d %H:%M') 방송 상태 갱신"
+          # 그 사이 main이 앞서 나갔으면 검증 안 된 코드 위로 rebase하지 않고 다음 실행에 맡긴다
+          if git push; then
+            echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
             echo "changed=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "::warning::main이 앞서 있어 이번 수집 결과는 커밋하지 않습니다. 다음 실행에서 다시 수집합니다."
+            echo "changed=false" >> "$GITHUB_OUTPUT"
           fi
 
   deploy:
@@ -68,7 +76,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: main
+          ref: ${{ needs.check.outputs.sha }}
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:

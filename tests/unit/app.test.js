@@ -8,6 +8,7 @@ import { createState, init, renderAll, renderError, select, shiftMonth } from '.
 const MAIN = readFileSync(join(import.meta.dirname, '../../index.html'), 'utf8').match(/<main>[\s\S]*<\/main>/)[0];
 
 const KST = (s) => Date.parse(s.replace(' ', 'T') + '+09:00');
+const at = (s) => new Date(KST(s)).toISOString(); // liveCheckedAt
 const st = (openDate, closeDate, title = '방송', category = null) => ({ openDate, closeDate, title, category });
 
 const DATA = {
@@ -52,7 +53,7 @@ describe('오늘 카드', () => {
   });
 
   it('방송 중이면 라이브 표시와 시작 시각', () => {
-    const data = { ...DATA, live: true, streams: [st('2026-10-02 20:00:00', null, '저챗')] };
+    const data = { ...DATA, live: true, liveCheckedAt: at('2026-10-02 20:07:00'), streams: [st('2026-10-02 20:00:00', null, '저챗')] };
     mount(data, KST('2026-10-02 21:00:00'));
     expect($('#today .verdict').textContent).toBe('방송 중');
     expect($('#today .live-dot')).not.toBeNull();
@@ -67,13 +68,14 @@ describe('오늘 카드', () => {
   });
 
   it('live 플래그가 남아 있어도 열린 방송이 없으면 방송함으로 본다', () => {
-    const data = { ...DATA, live: true, streams: [st('2026-10-02 09:00:00', '2026-10-02 11:00:00')] };
+    const data = { ...DATA, live: true, liveCheckedAt: at('2026-10-02 11:30:00'), streams: [st('2026-10-02 09:00:00', '2026-10-02 11:00:00')] };
     mount(data, KST('2026-10-02 12:00:00'));
     expect($('#today .verdict').textContent).toBe('방송함');
+    expect($('#today .stale')).toBeNull();
   });
 
   it('제목의 HTML을 이스케이프한다 (XSS)', () => {
-    const data = { ...DATA, live: true, streams: [st('2026-10-02 20:00:00', null, '<img src=x onerror="window.pwned=1">')] };
+    const data = { ...DATA, live: true, liveCheckedAt: at('2026-10-02 20:07:00'), streams: [st('2026-10-02 20:00:00', null, '<img src=x onerror="window.pwned=1">')] };
     mount(data, KST('2026-10-02 21:00:00'));
     expect($('#today img')).toBeNull();
     expect($('#today .detail').textContent).toContain('<img src=x');
@@ -84,25 +86,39 @@ describe('오늘 카드: 자정을 넘긴 방송·수집 지연', () => {
   const overnight = { ...DATA, live: true, streams: [...DATA.streams, st('2026-10-02 23:00:00', null, '심야')] };
 
   it('어제 시작해 자정을 넘긴 방송도 방송 중으로 보인다 (오늘 첫 수집 후)', () => {
-    mount({ ...overnight, checkedDays: ['2026-10-02', '2026-10-03'] }, KST('2026-10-03 01:00:00'));
+    mount({ ...overnight, liveCheckedAt: at('2026-10-03 00:07:00'), checkedDays: ['2026-10-02', '2026-10-03'] }, KST('2026-10-03 01:00:00'));
     expect($('#today .verdict').textContent).toBe('방송 중');
     expect($('#today .detail').textContent).toBe('어제 23:00 시작 · 심야');
     expect($('#today .stale')).toBeNull();
     expect(day('2026-10-02').className).toContain('on'); // 달력은 시작일 기준 그대로
   });
 
-  it('자정 직후 첫 수집 전에도 어제 확인된 데이터라면 방송 중으로 믿는다', () => {
-    mount(overnight, KST('2026-10-03 00:03:00'));
+  it('자정 직후 첫 수집 전에도 2시간 안에 확인됐으면 방송 중으로 믿는다', () => {
+    mount({ ...overnight, liveCheckedAt: at('2026-10-02 23:07:00') }, KST('2026-10-03 00:03:00'));
     expect($('#today .verdict').textContent).toBe('방송 중');
   });
 
   it('이틀 이상 이어진 방송은 날짜를 함께 보여준다', () => {
-    mount({ ...overnight, checkedDays: ['2026-10-02', '2026-10-03', '2026-10-04'] }, KST('2026-10-04 10:00:00'));
+    mount({ ...overnight, liveCheckedAt: at('2026-10-04 09:07:00'), checkedDays: ['2026-10-02', '2026-10-03', '2026-10-04'] }, KST('2026-10-04 10:00:00'));
     expect($('#today .detail').textContent).toBe('10/2 23:00 시작 · 심야');
   });
 
-  it('수집이 멈춰 live가 남아 있으면 방송 중으로 믿지 않고 지연 안내를 보여준다', () => {
-    mount(overnight, KST('2026-10-05 12:00:00'));
+  it('라이브 확인 후 정확히 2시간까지는 믿고, 그 뒤로는 방송 중으로 보이지 않고 안내한다', () => {
+    const data = { ...overnight, liveCheckedAt: at('2026-10-03 00:07:00'), checkedDays: ['2026-10-02', '2026-10-03'] };
+    mount(data, KST('2026-10-03 02:07:00'));
+    expect($('#today .verdict').textContent).toBe('방송 중');
+    mount(data, KST('2026-10-03 02:07:01'));
+    expect($('#today .verdict').textContent).toBe('아직 안 켬');
+    expect($('#today .stale').textContent).toBe('방송 중이었지만 최근 2시간 동안 상태를 확인하지 못해 최신 정보가 아닐 수 있어요.');
+  });
+
+  it('liveCheckedAt이 없는 예전 데이터의 live는 믿지 않는다', () => {
+    mount({ ...overnight, checkedDays: ['2026-10-02', '2026-10-03'] }, KST('2026-10-03 01:00:00'));
+    expect($('#today .verdict').textContent).toBe('아직 안 켬');
+  });
+
+  it('수집이 며칠 멈추면 미확인 표시와 마지막 확인일 안내', () => {
+    mount({ ...DATA }, KST('2026-10-05 12:00:00'));
     expect($('#today .verdict').textContent).toBe('아직 안 켬');
     expect($('#today .stale').textContent).toBe('마지막 자동 확인이 2026-10-02이라 최신 정보가 아닐 수 있어요.');
     expect($('#today .detail').textContent).toBe('어제 방송 여부는 아직 확인 중이에요.');
@@ -111,7 +127,7 @@ describe('오늘 카드: 자정을 넘긴 방송·수집 지연', () => {
   });
 
   it('자동 확인 기록이 아예 없으면 그렇게 안내한다', () => {
-    mount({ ...DATA, live: true, checkedDays: [], streams: [st('2026-10-02 20:00:00', null)] }, KST('2026-10-02 21:00:00'));
+    mount({ ...DATA, checkedDays: [], streams: [st('2026-10-02 20:00:00', '2026-10-02 20:30:00')] }, KST('2026-10-02 21:00:00'));
     expect($('#today .verdict').textContent).toBe('방송함');
     expect($('#today .stale').textContent).toBe('자동 확인 기록이 없어 최신 정보가 아닐 수 있어요.');
   });

@@ -63,9 +63,13 @@ function normalize(data) {
 
 const sortStreams = (streams) => streams.sort((a, b) => a.openDate.localeCompare(b.openDate));
 
-export function applyLiveStatus(data, live, today) {
+// checkedAt: 이번 수집 시각(ISO). 방송 중일 때만 남겨 페이지가 live 값의 신선도를 판단하게 한다
+// (방송 중이 아닐 땐 남기지 않아 매시간 커밋이 생기지 않는다)
+export function applyLiveStatus(data, live, today, checkedAt = null) {
   const isLive = live.status === 'OPEN';
-  const next = { ...normalize(data), live: isLive, streams: [...data.streams] };
+  const { liveCheckedAt, ...rest } = normalize(data);
+  const next = { ...rest, live: isLive, streams: [...data.streams] };
+  if (isLive && checkedAt) next.liveCheckedAt = checkedAt;
   // 수집에 성공한 날을 남긴다. d의 휴방은 d+1에 수집이 있어야 확정된다 (하루 한 번 커밋도 생겨 schedule 비활성 중지 방지)
   if (!next.checkedDays.includes(today)) next.checkedDays.push(today);
 
@@ -132,7 +136,7 @@ export async function run({
   // 조회를 먼저 해서, 실패하면 파일을 건드리지 않는다
   const live = await fetchLiveStatus(fetchImpl, apiUrl);
   const data = await loadData(dataPath, today);
-  let next = applyLiveStatus(data, live, today);
+  let next = applyLiveStatus(data, live, today, new Date(now).toISOString());
   try {
     next = await backfillFromReplays(next, { fetchImpl, serviceBase });
   } catch (e) {

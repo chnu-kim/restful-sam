@@ -131,10 +131,18 @@ describe('applyLiveStatus', () => {
     expect(base.streams).toEqual([]);
   });
 
-  it('방송 중이면 closeDate를 null로 두고 live=true', () => {
-    const next = applyLiveStatus(base, { ...OPEN, closeDate: '2026-09-25 15:24:35' }, '2026-10-02');
+  it('방송 중이면 closeDate를 null로 두고 live=true, 확인 시각을 남긴다', () => {
+    const next = applyLiveStatus(base, { ...OPEN, closeDate: '2026-09-25 15:24:35' }, '2026-10-02', '2026-10-02T11:07:00.000Z');
     expect(next.live).toBe(true);
+    expect(next.liveCheckedAt).toBe('2026-10-02T11:07:00.000Z');
     expect(next.streams[0].closeDate).toBeNull();
+  });
+
+  it('방송이 끝나면 확인 시각을 지운다 (매시간 커밋 방지)', () => {
+    const live = applyLiveStatus(base, OPEN, '2026-10-02', '2026-10-02T11:07:00.000Z');
+    const closed = applyLiveStatus(live, { ...OPEN, status: 'CLOSE' }, '2026-10-02', '2026-10-02T12:07:00.000Z');
+    expect(closed).not.toHaveProperty('liveCheckedAt');
+    expect(applyLiveStatus(base, OPEN, '2026-10-02')).not.toHaveProperty('liveCheckedAt');
   });
 
   it('같은 openDate의 방송이 끝나면 그 자리에서 갱신한다', () => {
@@ -293,6 +301,7 @@ describe('run', () => {
     expect(saved.endsWith('\n')).toBe(true);
     expect(JSON.parse(saved)).toEqual(first.data);
     expect(first.data.since).toBe('2026-10-02');
+    expect(first.data).not.toHaveProperty('liveCheckedAt');
 
     const second = await run({ fetchImpl: okFetch(CLOSED), dataPath: path, now, log });
     expect(second.changed).toBe(false);
@@ -320,6 +329,11 @@ describe('run', () => {
     expect(r.changed).toBe(true);
     expect(warn).toHaveBeenCalledWith('다시보기 보충 실패: videos HTTP 503');
     expect(JSON.parse(await readFile(path, 'utf8')).streams).toHaveLength(1);
+  });
+
+  it('방송 중이면 실행 시각을 liveCheckedAt으로 저장한다', async () => {
+    const r = await run({ fetchImpl: okFetch(OPEN), serviceBase: BASE, dataPath: path, now, log: vi.fn(), warn: vi.fn() });
+    expect(r.data.liveCheckedAt).toBe(new Date(now).toISOString());
   });
 
   it('다시보기로 놓친 방송을 보충해 저장한다', async () => {
