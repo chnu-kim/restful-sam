@@ -39,9 +39,9 @@ export function dayMinutes(streams) {
   return streams.reduce((sum, s) => sum + streamMinutes(s), 0);
 }
 
-// 달력 칸 막대 길이(%). 12시간이면 가득 차고, 아주 짧은 방송도 보이도록 최소 길이를 둔다
-export const BAR_FULL_MINUTES = 12 * 60;
-export const barPercent = (m) => Math.max(4, Math.min(100, Math.round((m / BAR_FULL_MINUTES) * 100)));
+// 달력 칸을 아래부터 채울 높이(%). 칸 전체가 하루(24시간)이고, 아주 짧은 방송도 보이도록 최소 높이를 둔다
+export const DAY_MINUTES = 24 * 60;
+export const fillPercent = (m) => Math.max(3, Math.min(100, Math.round((m / DAY_MINUTES) * 100)));
 
 // 상세용 '8시간 22분'
 export function durationLong(m) {

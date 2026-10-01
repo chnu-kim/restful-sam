@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-  addDays, addMonths, barPercent, computeStats, currentStreak, dayOfWeek, dayMinutes, dayStatus, dayTimeRange, durationLong, esc, firstMonth, groupByDay, hm, isFinal, makeContext, monthDays, monthLabel, streamMinutes, todayKst,
+  addDays, addMonths, computeStats, currentStreak, dayOfWeek, dayMinutes, dayStatus, dayTimeRange, durationLong, esc, fillPercent, firstMonth, groupByDay, hm, isFinal, makeContext, monthDays, monthLabel, streamMinutes, todayKst,
 } from '../../public/src/calendar.js';
 
 const s = (openDate, closeDate = null) => ({ openDate, closeDate, title: 't', category: null });
@@ -227,11 +227,13 @@ describe('방송 시간', () => {
     expect(durationLong(m)).toBe(long);
   });
 
-  it('막대는 12시간이 가득, 넘으면 가득, 아주 짧아도 최소 4%', () => {
-    expect(barPercent(360)).toBe(50);
-    expect(barPercent(502)).toBe(70);
-    expect(barPercent(720)).toBe(100);
-    expect(barPercent(900)).toBe(100);
-    expect(barPercent(5)).toBe(4);
+  it('칸은 하루 24시간이 가득, 넘으면 가득, 아주 짧아도 최소 3%', () => {
+    expect(fillPercent(360)).toBe(25);
+    expect(fillPercent(502)).toBe(35);
+    expect(fillPercent(720)).toBe(50);
+    expect(fillPercent(1200)).toBe(83);
+    expect(fillPercent(1440)).toBe(100);
+    expect(fillPercent(1600)).toBe(100);
+    expect(fillPercent(5)).toBe(3);
   });
 });

@@ -80,19 +80,17 @@ test('자정을 넘겨 이어지는 방송은 오늘 카드에 방송 중으로 
   await expect(page.locator('#today .detail')).toHaveText('어제 23:00 시작 · 심야');
 });
 
-// 막대 길이는 방송 시간에 비례하고(12시간 = 칸 가득), 폰과 데스크톱에서 같게 보인다
+// 칸 전체가 하루(24시간)이고 방송 시간만큼 아래부터 채운다. 폰과 데스크톱에서 같게 보인다
 for (const width of [360, 1024]) {
-  test(`${width}px에서 방송 시간 막대가 칸 안에 비율대로 그려진다`, async ({ page }) => {
-    const data = { ...BASE, streams: [...BASE.streams, st('2026-10-01 08:00:00', '2026-10-01 14:00:00')] };
+  test(`${width}px에서 방송한 날 칸이 방송 시간만큼 아래부터 채워진다`, async ({ page }) => {
+    const data = { ...BASE, streams: [...BASE.streams, st('2026-10-01 08:00:00', '2026-10-01 20:00:00')] };
     await page.setViewportSize({ width, height: 900 });
     await open(page, { data });
-    const ratio = await day(page, '2026-10-01').locator('.bar').evaluate((bar) => {
-      const cell = bar.parentElement.getBoundingClientRect();
-      const r = bar.getBoundingClientRect();
-      if (r.left < cell.left || r.right > cell.right) return -1;
-      return bar.firstElementChild.getBoundingClientRect().width / r.width;
-    });
-    expect(ratio).toBeCloseTo(0.5, 1);
+    const cell = day(page, '2026-10-01');
+    await expect(cell).toHaveClass(/\bfilled\b/);
+    const style = await cell.evaluate((el) => ({ fill: el.style.getPropertyValue('--fill'), bg: getComputedStyle(el).backgroundImage }));
+    expect(style.fill).toBe('50%');
+    expect(style.bg).toContain('linear-gradient');
   });
 }
 
