@@ -57,6 +57,7 @@
   .today .label { color: var(--muted); font-size: 14px; }
   .today .verdict { font-size: 40px; font-weight: 700; letter-spacing: -0.03em; margin: 4px 0; }
   .today .detail { color: var(--muted); font-size: 14px; }
+  .today .stale { margin-top: 12px; font-size: 13px; color: var(--off); }
   .verdict.on { color: var(--on); }
   .verdict.off { color: var(--off); }
   .verdict.pending { color: var(--muted); }
@@ -95,6 +96,10 @@
   .day.off { background: var(--off-soft); }
   .day.off .mark { color: var(--off); }
   .day.pending { outline: 2px dashed var(--pending); outline-offset: -2px; background: transparent; }
+  .day.unknown {
+    background: repeating-linear-gradient(135deg, var(--none) 0 6px, transparent 6px 12px);
+  }
+  .day.unknown .mark { color: var(--muted); }
   .day.future, .day.blank { background: transparent; color: var(--muted); cursor: default; }
   .day.nodata { color: var(--muted); }
   .day.selected { outline: 2px solid var(--text); outline-offset: -2px; }
@@ -120,15 +125,16 @@
 
   <section class="cal">
     <div class="cal-head">
-      <button id="prev" aria-label="이전 달">‹</button>
+      <button id="prev" aria-label="이전 달" disabled>‹</button>
       <h2 id="month"></h2>
-      <button id="next" aria-label="다음 달">›</button>
+      <button id="next" aria-label="다음 달" disabled>›</button>
     </div>
     <div class="grid" id="grid"></div>
     <div class="legend">
       <span><i style="background:var(--on-soft)"></i>방송</span>
       <span><i style="background:var(--off-soft)"></i>휴방</span>
       <span><i style="outline:2px dashed var(--pending);outline-offset:-2px"></i>오늘 (아직 모름)</span>
+      <span><i style="background:repeating-linear-gradient(135deg, var(--pending) 0 2px, transparent 2px 4px)"></i>확인 전</span>
       <span><i style="background:var(--none)"></i>기록 없음</span>
     </div>
     <div class="info" id="info"><span class="muted">날짜를 누르면 방송 정보를 볼 수 있어요.</span></div>

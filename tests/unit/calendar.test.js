@@ -1,10 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import {
-  addDays, addMonths, computeStats, currentStreak, dayOfWeek, dayStatus, esc, firstMonth, groupByDay, hm, monthDays, monthLabel, todayKst,
+  addDays, addMonths, computeStats, currentStreak, dayOfWeek, dayStatus, esc, firstMonth, groupByDay, hm, isFinal, makeContext, monthDays, monthLabel, todayKst,
 } from '../../src/calendar.js';
 
 const s = (openDate, closeDate = null) => ({ openDate, closeDate, title: 't', category: null });
-const ctxOf = (streams, since, today) => ({ byDay: groupByDay(streams), since, today });
+// checkedDays가 비어 있으면 모든 지난 날을 사용자가 확인한 기록(확정)으로 본다
+const ctxOf = (streams, since, today, checkedDays = []) => makeContext({ streams, since, checkedDays }, today);
 
 describe('날짜 유틸', () => {
   it('todayKst는 KST 자정 경계를 따른다', () => {
@@ -130,6 +131,50 @@ describe('monthLabel', () => {
   it('올해면 월만, 다른 해면 연도까지', () => {
     expect(monthLabel('2026-09', '2026-10-02')).toBe('9월');
     expect(monthLabel('2025-12', '2026-01-03')).toBe('2025년 12월');
+  });
+});
+
+describe('확정 판정 (checkedDays)', () => {
+  // 수집기는 10/2부터 가동. 9/24~10/1은 사용자가 확인한 기록이다
+  const streams = [s('2026-09-25 08:49:35', '2026-09-25 15:24:35')];
+
+  it('수집기 가동 전 날짜는 확정이다', () => {
+    const ctx = ctxOf(streams, '2026-09-24', '2026-10-02', ['2026-10-02']);
+    expect(dayStatus('2026-09-30', ctx)).toBe('off');
+    expect(dayStatus('2026-10-01', ctx)).toBe('off');
+  });
+
+  it('자정 직후 첫 수집 전에는 어제가 미확인, 수집 후 휴방으로 확정된다', () => {
+    const before = ctxOf(streams, '2026-09-24', '2026-10-03', ['2026-10-02']);
+    expect(dayStatus('2026-10-02', before)).toBe('unknown');
+    const after = ctxOf(streams, '2026-09-24', '2026-10-03', ['2026-10-02', '2026-10-03']);
+    expect(dayStatus('2026-10-02', after)).toBe('off');
+  });
+
+  it('수집이 3일 멈췄다 재개되면, 멈춘 동안의 날은 다음 날 수집이 없어 미확인으로 남는다', () => {
+    // 10/2 수집 → 10/3~10/5 장애 → 10/6 재개
+    const ctx = ctxOf(streams, '2026-09-24', '2026-10-06', ['2026-10-02', '2026-10-06']);
+    expect(dayStatus('2026-10-02', ctx)).toBe('unknown'); // 10/3 수집 없음
+    expect(dayStatus('2026-10-03', ctx)).toBe('unknown');
+    expect(dayStatus('2026-10-04', ctx)).toBe('unknown');
+    expect(dayStatus('2026-10-05', ctx)).toBe('off'); // 10/6 수집으로 확정
+    expect(computeStats(ctx, '2026-10')).toMatchObject({ on: 0, off: 2, offRate: 100 }); // 10/1, 10/5
+  });
+
+  it('방송 기록이 있으면 확인 여부와 관계없이 방송이다', () => {
+    const ctx = ctxOf([s('2026-10-03 10:00:00')], '2026-09-24', '2026-10-06', ['2026-10-02']);
+    expect(dayStatus('2026-10-03', ctx)).toBe('on');
+  });
+
+  it('isFinal / makeContext 기본값', () => {
+    const ctx = makeContext({ streams: [], since: '2026-10-01' }, '2026-10-05');
+    expect(ctx.firstChecked).toBe('9999-12-31');
+    expect(isFinal('2026-10-03', ctx)).toBe(true);
+  });
+
+  it('연속 일수는 오늘 미정·어제 미확인을 건너뛰고 가장 최근 판정된 날부터 센다', () => {
+    const ctx = ctxOf(streams, '2026-09-24', '2026-10-03', ['2026-10-02']);
+    expect(currentStreak(ctx)).toEqual({ streak: 6, streakKind: 'off' }); // 9/26~10/1
   });
 });
 

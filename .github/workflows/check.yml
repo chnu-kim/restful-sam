@@ -17,10 +17,26 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  # 코드가 바뀐 push는 테스트를 통과해야 수집(데이터 커밋)과 배포를 한다. schedule 경로는 npm ci 없이 가볍게 유지
+  verify:
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm test
+
   check:
+    needs: verify
+    if: ${{ !cancelled() && (needs.verify.result == 'success' || needs.verify.result == 'skipped') }}
     runs-on: ubuntu-latest
     outputs:
       changed: ${{ steps.commit.outputs.changed }}
+      sha: ${{ steps.commit.outputs.sha }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -29,20 +45,30 @@ jobs:
       - run: node scripts/check.mjs
       - id: commit
         run: |
+          # 배포는 이 실행에서 검증한 코드(+데이터 커밋)만 대상으로 한다
+          echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
           if git diff --quiet; then
             echo "changed=false" >> "$GITHUB_OUTPUT"
-          else
-            git config user.name "github-actions[bot]"
-            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-            git add data/streams.json
-            git commit -m "data: $(TZ=Asia/Seoul date '+%Y-%m-%d %H:%M') 방송 상태 갱신"
-            git push
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add data/streams.json
+          git commit -m "data: $(TZ=Asia/Seoul date '+%Y-%m-%d %H:%M') 방송 상태 갱신"
+          # 그 사이 main이 앞서 나갔으면 검증 안 된 코드 위로 rebase하지 않고 다음 실행에 맡긴다
+          if git push; then
+            echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
             echo "changed=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "::warning::main이 앞서 있어 이번 수집 결과는 커밋하지 않습니다. 다음 실행에서 다시 수집합니다."
+            echo "changed=false" >> "$GITHUB_OUTPUT"
           fi
 
   deploy:
     needs: check
-    if: needs.check.outputs.changed == 'true' || github.event_name != 'schedule'
+    if: >-
+      !cancelled() && needs.check.result == 'success'
+      && (needs.check.outputs.changed == 'true' || github.event_name != 'schedule')
     runs-on: ubuntu-latest
     environment:
       name: github-pages
@@ -50,7 +76,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: main
+          ref: ${{ needs.check.outputs.sha }}
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:

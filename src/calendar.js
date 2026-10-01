@@ -33,13 +33,30 @@ export function groupByDay(streams) {
   return byDay;
 }
 
-// on: 방송 / off: 휴방 / pending: 오늘인데 아직 방송 없음 / nodata: 기록 시작 전 / future: 미래
-export function dayStatus(d, { byDay, since, today }) {
-  if (byDay.has(d)) return 'on';
-  if (d > today) return 'future';
-  if (d < since) return 'nodata';
-  if (d === today) return 'pending';
-  return 'off';
+// 판정 컨텍스트. checkedDays는 수집기가 한 번이라도 성공한 날짜 목록이다
+export function makeContext(data, today) {
+  const checkedDays = data.checkedDays ?? [];
+  return {
+    byDay: groupByDay(data.streams),
+    since: data.since,
+    today,
+    checked: new Set(checkedDays),
+    // 수집기 가동 전 날짜는 사용자가 직접 확인해 넣은 기록이라 확정으로 본다
+    firstChecked: checkedDays[0] ?? '9999-12-31',
+  };
+}
+
+// d의 마지막 방송은 d+1 첫 수집에서 잡히므로, d+1에 수집이 있었거나 수집기 가동 전이면 확정이다
+export const isFinal = (d, ctx) => d < ctx.firstChecked || ctx.checked.has(addDays(d, 1));
+
+// on: 방송 / off: 휴방 / pending: 오늘인데 아직 방송 없음 / unknown: 지난 날인데 아직 확인 안 됨
+// nodata: 기록 시작 전 / future: 미래
+export function dayStatus(d, ctx) {
+  if (ctx.byDay.has(d)) return 'on';
+  if (d > ctx.today) return 'future';
+  if (d < ctx.since) return 'nodata';
+  if (d === ctx.today) return 'pending';
+  return isFinal(d, ctx) ? 'off' : 'unknown';
 }
 
 // ym 달(기본: 오늘이 속한 달)의 1일부터 말일 또는 오늘까지의 방송·휴방 일수. 휴방률은 판정된 날이 없으면 null
@@ -58,9 +75,10 @@ export function computeStats(ctx, ym = ctx.today.slice(0, 7)) {
   return { on, off, offRate, ...currentStreak(ctx) };
 }
 
-// 오늘이 미정이면 어제부터 거슬러 올라가며 같은 상태가 이어진 일수를 센다
+// 가장 최근에 판정된 날부터 거슬러 올라가며 같은 상태가 이어진 일수를 센다 (오늘 미정·미확인인 날은 건너뜀)
 export function currentStreak(ctx) {
-  let d = dayStatus(ctx.today, ctx) === 'pending' ? addDays(ctx.today, -1) : ctx.today;
+  let d = ctx.today;
+  while (['pending', 'unknown'].includes(dayStatus(d, ctx))) d = addDays(d, -1);
   const kind = dayStatus(d, ctx);
   if (kind !== 'on' && kind !== 'off') return { streak: 0, streakKind: null };
   let streak = 0;
