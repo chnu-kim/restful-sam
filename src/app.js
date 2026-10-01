@@ -217,8 +217,9 @@ export function bindTheme(root = document, win = window) {
     }
     sync();
   });
-  // 고른 테마가 없을 때 기기 설정이 바뀌면 아이콘도 따라간다
-  media.addEventListener('change', sync);
+  // 고른 테마가 없을 때 기기 설정이 바뀌면 아이콘도 따라간다 (iOS 13 이하 Safari는 addListener만 있다)
+  if (media.addEventListener) media.addEventListener('change', sync);
+  else media.addListener?.(sync);
   sync();
 }
 

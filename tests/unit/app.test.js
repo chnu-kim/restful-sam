@@ -422,6 +422,15 @@ describe('테마 전환', () => {
     expect(html().dataset.theme).toBe('dark');
   });
 
+  it('옛 Safari처럼 addListener만 있어도 기기 설정 변경을 따라간다', () => {
+    const listeners = [];
+    const media = { matches: false, addListener: (fn) => listeners.push(fn) };
+    bindTheme(document, { matchMedia: () => media, localStorage: { setItem() {} } });
+    media.matches = true;
+    listeners.forEach((fn) => fn());
+    expect(html().dataset.themeNow).toBe('dark');
+  });
+
   it('저장된 테마(data-theme)가 기기 설정보다 우선한다', () => {
     html().dataset.theme = 'light';
     bindTheme(document, fakeWindow(true));

@@ -205,8 +205,9 @@
 </main>
 <script type="module">
 import { bindTheme, init } from './src/app.js';
-bindTheme();
+// 테마 버튼이 실패해도 데이터는 그려지도록 init을 먼저 부른다
 init();
+bindTheme();
 </script>
 </body>
 </html>
