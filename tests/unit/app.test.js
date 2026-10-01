@@ -151,14 +151,15 @@ describe('접근성', () => {
     expect(day('2026-10-01').getAttribute('aria-pressed')).toBe('true');
   });
 
-  it('지난 방송일 칸에는 방송 시간을 막대로 보여 주고 aria-label에 시간과 시각을 읽어 준다', () => {
+  it('지난 방송일 칸은 방송 시간만큼(하루 24시간 기준) 채우고 aria-label에 시간과 시각을 읽어 준다', () => {
     const data = { ...DATA, streams: [...DATA.streams, st('2026-10-01 20:00:00', '2026-10-02 01:30:00'), st('2026-10-03 10:00:00', '2026-10-03 12:00:00')] };
     mount(data, KST('2026-10-03 13:00:00'));
-    expect(day('2026-10-01').querySelector('.bar i').style.width).toBe('46%');
+    expect(day('2026-10-01').style.getPropertyValue('--fill')).toBe('23%');
+    expect(day('2026-10-01').classList.contains('filled')).toBe(true);
     expect(day('2026-10-01').textContent).toBe('1');
     expect(day('2026-10-01').getAttribute('aria-label')).toBe('10월 1일 방송 5시간 30분, 20:00~01:30');
     // 오늘은 오늘 카드가 맡으므로 칸에는 '방송'만
-    expect(day('2026-10-03').querySelector('.bar')).toBeNull();
+    expect(day('2026-10-03').classList.contains('filled')).toBe(false);
     expect(day('2026-10-03').textContent).toBe('3방송');
     expect(day('2026-10-03').getAttribute('aria-label')).toBe('10월 3일 방송');
   });
@@ -229,7 +230,7 @@ describe('달력', () => {
     expect($('#next').disabled).toBe(true);
     shiftMonth(document, state, -1);
     expect($('#month').textContent).toBe('2026년 9월');
-    expect(day('2026-09-25').className).toBe('day on');
+    expect(day('2026-09-25').className).toBe('day on filled');
     expect(day('2026-09-24').className).toBe('day nodata');
     expect($('#prev').disabled).toBe(true);
     expect($('#next').disabled).toBe(false);

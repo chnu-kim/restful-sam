@@ -1,6 +1,6 @@
 // 페이지 렌더링. 상태는 state 객체 하나로 들고, DOM은 root(document)에서 찾는다.
 import {
-  DOW, addDays, addMonths, barPercent, computeStats, dayOfWeek, dayMinutes, dayStatus, dayTimeRange, durationLong, esc, firstMonth, hm, makeContext, monthDays, monthLabel,
+  DOW, addDays, addMonths, computeStats, dayOfWeek, dayMinutes, dayStatus, dayTimeRange, durationLong, esc, fillPercent, firstMonth, hm, makeContext, monthDays, monthLabel,
   streamMinutes, todayKst,
 } from './calendar.js';
 
@@ -94,16 +94,18 @@ export function renderCalendar(root, state) {
   for (const d of days) {
     const s = dayStatus(d, ctx(state));
     const sel = d === state.selected;
-    // 지난 방송일은 '방송' 대신 방송 시간을 막대로 보여 주고, 시작~종료는 상세(누르기·마우스 올리기)에서 보여 준다
+    // 지난 방송일은 '방송' 대신 칸을 방송 시간만큼(하루 24시간 기준) 아래부터 채우고, 시작~종료는 상세(누르기·마우스 올리기)에서 보여 준다
     const mins = s === 'on' && d < state.today ? dayMinutes(state.byDay.get(d)) : null;
     let label = `${Number(d.slice(5, 7))}월 ${Number(d.slice(8))}일${LABELS[s] ? ' ' + LABELS[s] : ''}`;
     let mark = `<span class="mark">${MARKS[s]}</span>`;
+    let fill = '';
     if (mins !== null) {
       const range = dayTimeRange(state.byDay.get(d));
       label += ` ${durationLong(mins)}, ${range.open}~${range.close}`;
-      mark = `<span class="bar" aria-hidden="true"><i style="width:${barPercent(mins)}%"></i></span>`;
+      mark = '';
+      fill = ` style="--fill:${fillPercent(mins)}%"`;
     }
-    html += `<button class="day ${s}${sel ? ' selected' : ''}" data-d="${d}" aria-label="${label}" aria-pressed="${sel}"${s === 'future' ? ' disabled' : ''}><span>${Number(d.slice(8))}</span>${mark}</button>`;
+    html += `<button class="day ${s}${fill ? ' filled' : ''}${sel ? ' selected' : ''}" data-d="${d}"${fill} aria-label="${label}" aria-pressed="${sel}"${s === 'future' ? ' disabled' : ''}><span>${Number(d.slice(8))}</span>${mark}</button>`;
   }
   const grid = root.getElementById('grid');
   grid.innerHTML = html;

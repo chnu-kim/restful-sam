@@ -23,8 +23,7 @@
     --line: #e3e1d9;
     --on: #00b36b;
     --on-soft: #d6f5e6;
-    --on-text: #00703f;
-    --on-track: #b3e8cd;
+    --on-fill: #86dbb2;
     --off: #e5484d;
     --off-soft: #fde2e2;
     --pending: #b8b4a8;
@@ -41,8 +40,7 @@
       --line: #2f2e2b;
       --on: #1fd286;
       --on-soft: #143a29;
-      --on-text: #5ee8a8;
-      --on-track: #22573f;
+      --on-fill: #23774f;
       --off: #ff6b6f;
       --off-soft: #3d1c1d;
       --pending: #6b685f;
@@ -58,8 +56,7 @@
     --line: #2f2e2b;
     --on: #1fd286;
     --on-soft: #143a29;
-    --on-text: #5ee8a8;
-    --on-track: #22573f;
+    --on-fill: #23774f;
     --off: #ff6b6f;
     --off-soft: #3d1c1d;
     --pending: #6b685f;
@@ -130,8 +127,8 @@
   .day .mark { font-size: 11px; font-weight: 600; }
   .day.on { background: var(--on-soft); }
   .day.on .mark { color: var(--on); }
-  .day .bar { display: block; height: 8px; border-radius: 4px; background: var(--on-track); overflow: hidden; }
-  .day .bar i { display: block; height: 100%; border-radius: inherit; background: var(--on-text); }
+  /* 칸 전체가 하루(24시간): 방송 시간(--fill)만큼 아래부터 진한 초록으로 채운다 */
+  .day.on.filled { background: linear-gradient(to top, var(--on-fill) var(--fill), var(--on-soft) var(--fill)); }
   .day.off { background: var(--off-soft); }
   .day.off .mark { color: var(--off); }
   .day.pending { outline: 2px dashed var(--pending); outline-offset: -2px; background: transparent; }
@@ -150,7 +147,6 @@
     .cal { padding: 16px 10px; }
     .grid { gap: 4px; }
     .day { padding: 4px; border-radius: 8px; }
-    .day .bar { height: 6px; border-radius: 3px; }
   }
   .tip {
     position: absolute; z-index: 10; width: max-content; max-width: 280px; pointer-events: none;
@@ -192,7 +188,7 @@
     <div class="grid" id="grid"></div>
     <div class="tip" id="tip" role="tooltip" hidden></div>
     <div class="legend">
-      <span><i style="background:var(--on-soft)"></i>방송 (막대: 방송 시간, 가득 차면 12시간)</span>
+      <span><i style="background:linear-gradient(to top, var(--on-fill) 50%, var(--on-soft) 50%)"></i>방송 (채워진 높이: 방송 시간, 가득 차면 24시간)</span>
       <span><i style="background:var(--off-soft)"></i>휴방</span>
       <span><i style="outline:2px dashed var(--pending);outline-offset:-2px"></i>오늘 (아직 모름)</span>
       <span><i style="background:repeating-linear-gradient(135deg, var(--pending) 0 2px, transparent 2px 4px)"></i>확인 전</span>
