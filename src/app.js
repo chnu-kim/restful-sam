@@ -192,34 +192,58 @@ export function renderError(root) {
 }
 
 export const THEME_KEY = 'theme';
+const THEME_LABELS = { system: '시스템', light: '라이트', dark: '다크' };
 
-// 지금 보이는 테마: 고른 값(data-theme)이 있으면 그것, 없으면 기기 설정
-export function currentTheme(root, win) {
-  return root.documentElement.dataset.theme ?? (win.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+// 테마 선택: 'system'(기본, 기기 설정을 따름) · 'light' · 'dark'. 기본값은 저장하지 않고 지운다
+export function applyTheme(root, win, choice) {
+  const html = root.documentElement;
+  try {
+    if (choice === 'system') {
+      delete html.dataset.theme;
+      win.localStorage.removeItem(THEME_KEY);
+    } else {
+      html.dataset.theme = choice;
+      win.localStorage.setItem(THEME_KEY, choice);
+    }
+  } catch {
+    // 저장이 막힌 환경에서도 이번 화면에선 바뀐다
+  }
 }
 
-// 테마 버튼: 누르면 지금 보이는 테마의 반대로 바꾸고 저장한다. 아이콘은 지금 테마(data-theme-now)를 따른다
+// 테마 버튼: 누르면 시스템/라이트/다크 메뉴를 연다. 아이콘은 고른 값(data-theme 유무)을 CSS로 따른다
 export function bindTheme(root = document, win = window) {
   const btn = root.getElementById('theme');
-  const media = win.matchMedia('(prefers-color-scheme: dark)');
+  const menu = root.getElementById('theme-menu');
   const sync = () => {
-    const now = currentTheme(root, win);
-    root.documentElement.dataset.themeNow = now;
-    btn.setAttribute('aria-label', now === 'dark' ? '라이트 모드로 전환' : '다크 모드로 전환');
+    const choice = root.documentElement.dataset.theme ?? 'system';
+    btn.setAttribute('aria-label', `테마: ${THEME_LABELS[choice]}`);
+    menu.querySelectorAll('[data-choice]').forEach((b) => b.setAttribute('aria-checked', String(b.dataset.choice === choice)));
+  };
+  const setOpen = (open) => {
+    menu.hidden = !open;
+    btn.setAttribute('aria-expanded', String(open));
   };
   btn.addEventListener('click', () => {
-    const next = currentTheme(root, win) === 'dark' ? 'light' : 'dark';
-    root.documentElement.dataset.theme = next;
-    try {
-      win.localStorage.setItem(THEME_KEY, next);
-    } catch {
-      // 저장이 막힌 환경에서도 이번 화면에선 바뀐다
-    }
-    sync();
+    setOpen(menu.hidden);
+    if (!menu.hidden) menu.querySelector('[aria-checked="true"]').focus();
   });
-  // 고른 테마가 없을 때 기기 설정이 바뀌면 아이콘도 따라간다 (iOS 13 이하 Safari는 addListener만 있다)
-  if (media.addEventListener) media.addEventListener('change', sync);
-  else media.addListener?.(sync);
+  menu.addEventListener('click', (e) => {
+    const item = e.target.closest('[data-choice]');
+    if (!item) return;
+    applyTheme(root, win, item.dataset.choice);
+    sync();
+    setOpen(false);
+    btn.focus();
+  });
+  // 메뉴 밖을 누르거나 Esc로 닫는다
+  root.addEventListener('click', (e) => {
+    if (!menu.hidden && !e.target.closest('.theme-wrap')) setOpen(false);
+  });
+  root.addEventListener('keydown', (e) => {
+    if (e.key !== 'Escape' || menu.hidden) return;
+    setOpen(false);
+    btn.focus();
+  });
   sync();
 }
 

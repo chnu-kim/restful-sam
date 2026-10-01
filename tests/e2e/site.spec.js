@@ -96,18 +96,27 @@ for (const width of [360, 1024]) {
   });
 }
 
-test('테마 버튼으로 라이트/다크를 바꾸고, 새로고침해도 유지된다', async ({ page }) => {
+test('기본은 시스템 테마, 메뉴에서 고른 테마는 새로고침해도 유지되고 시스템으로 되돌릴 수 있다', async ({ page }) => {
   await page.emulateMedia({ colorScheme: 'dark' });
   await open(page);
   const bg = () => page.evaluate(() => getComputedStyle(document.body).backgroundColor);
-  expect(await bg()).toBe('rgb(20, 20, 19)'); // 기기 설정(다크)을 따른다
-  await page.locator('#theme').click();
+  const choose = async (name) => {
+    await page.locator('#theme').click();
+    await page.getByRole('menuitemradio', { name }).click();
+  };
+  expect(await bg()).toBe('rgb(20, 20, 19)'); // 기기 설정(다크)
+  await expect(page.locator('#theme')).toHaveAttribute('aria-label', '테마: 시스템');
+  await choose('라이트');
   expect(await bg()).toBe('rgb(246, 245, 241)');
-  await expect(page.locator('#theme')).toHaveAttribute('aria-label', '다크 모드로 전환');
   await page.reload();
   expect(await bg()).toBe('rgb(246, 245, 241)');
-  await page.locator('#theme').click();
+  await expect(page.locator('#theme')).toHaveAttribute('aria-label', '테마: 라이트');
+  await choose('시스템');
   expect(await bg()).toBe('rgb(20, 20, 19)');
+  await page.emulateMedia({ colorScheme: 'light' }); // 시스템이면 기기 설정 변경을 따라간다
+  expect(await bg()).toBe('rgb(246, 245, 241)');
+  await page.reload();
+  await expect(page.locator('#theme')).toHaveAttribute('aria-label', '테마: 시스템');
 });
 
 test('수집이 멈추면 지연 안내와 미확인 표시', async ({ page }) => {
