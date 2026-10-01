@@ -81,22 +81,38 @@ describe('오늘 카드', () => {
 });
 
 describe('통계', () => {
-  it('이번 달 기준: 10/1 휴방, 9월 방송은 세지 않는다', () => {
+  const texts = () => [...document.querySelectorAll('.stat')].map((e) => e.textContent);
+
+  it('보고 있는 달(10월) 기준: 10/1 휴방, 9월 방송은 세지 않는다', () => {
     mount(DATA, KST('2026-10-02 12:00:00'));
-    const stats = [...document.querySelectorAll('.stat')].map((e) => e.textContent);
-    expect(stats).toEqual(['0일이번 달 방송한 날', '1일이번 달 휴방한 날', '100%이번 달 휴방률', '1일연속 휴방']);
+    expect(texts()).toEqual(['0일10월 방송한 날', '1일10월 휴방한 날', '100%10월 휴방률', '1일현재 연속 휴방']);
   });
 
-  it('이번 달에 판정된 날이 없으면 휴방률은 -', () => {
+  it('달력을 넘기면 월 통계가 그 달로 바뀌고 연속 일수는 그대로다', () => {
+    const data = { ...DATA, since: '2026-09-25' };
+    const state = mount(data, KST('2026-10-02 12:00:00'));
+    shiftMonth(document, state, -1);
+    expect(texts()).toEqual(['1일9월 방송한 날', '5일9월 휴방한 날', '83%9월 휴방률', '6일현재 연속 휴방']);
+    shiftMonth(document, state, 1);
+    expect(texts()[0]).toBe('0일10월 방송한 날');
+  });
+
+  it('다른 해의 달은 연도를 붙인다', () => {
+    const data = { ...DATA, since: '2025-12-30', streams: [] };
+    const state = mount(data, KST('2026-01-02 12:00:00'));
+    shiftMonth(document, state, -1);
+    expect(texts().slice(0, 3)).toEqual(['0일2025년 12월 방송한 날', '2일2025년 12월 휴방한 날', '100%2025년 12월 휴방률']);
+  });
+
+  it('그 달에 판정된 날이 없으면 휴방률은 -', () => {
     mount(DATA, KST('2026-10-01 12:00:00'));
-    const stats = [...document.querySelectorAll('.stat')].map((e) => e.textContent);
-    expect(stats.slice(0, 3)).toEqual(['0일이번 달 방송한 날', '0일이번 달 휴방한 날', '-이번 달 휴방률']);
+    expect(texts().slice(0, 3)).toEqual(['0일10월 방송한 날', '0일10월 휴방한 날', '-10월 휴방률']);
   });
 
   it('연속 방송 라벨', () => {
     mount({ ...DATA, streams: [st('2026-10-02 09:00:00', '2026-10-02 11:00:00')] }, KST('2026-10-02 12:00:00'));
-    expect(document.querySelectorAll('.stat')[2].textContent).toBe('50%이번 달 휴방률');
-    expect(document.querySelectorAll('.stat')[3].textContent).toBe('1일연속 방송');
+    expect(texts()[2]).toBe('50%10월 휴방률');
+    expect(texts()[3]).toBe('1일현재 연속 방송');
   });
 });
 
