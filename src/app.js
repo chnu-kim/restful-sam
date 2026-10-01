@@ -1,6 +1,6 @@
 // 페이지 렌더링. 상태는 state 객체 하나로 들고, DOM은 root(document)에서 찾는다.
 import {
-  DOW, addDays, addMonths, computeStats, dayOfWeek, dayStatus, esc, firstMonth, groupByDay, hm, monthDays, todayKst,
+  DOW, addDays, addMonths, computeStats, dayOfWeek, dayStatus, esc, firstMonth, groupByDay, hm, monthDays, monthLabel, todayKst,
 } from './calendar.js';
 
 const MARKS = { on: '방송', off: '휴방', pending: '?', nodata: '', future: '' };
@@ -36,12 +36,14 @@ export function renderToday(root, state) {
 }
 
 export function renderStats(root, state) {
-  const s = computeStats(ctx(state));
+  // 월 통계는 달력에서 보고 있는 달을 따르고, 연속 일수는 항상 현재 기준이다
+  const s = computeStats(ctx(state), state.view);
+  const month = monthLabel(state.view, state.today);
   root.getElementById('stats').innerHTML = [
-    [s.on + '일', '이번 달 방송한 날'],
-    [s.off + '일', '이번 달 휴방한 날'],
-    [s.offRate === null ? '-' : s.offRate + '%', '이번 달 휴방률'],
-    [s.streak + '일', s.streakKind === 'off' ? '연속 휴방' : '연속 방송'],
+    [s.on + '일', `${month} 방송한 날`],
+    [s.off + '일', `${month} 휴방한 날`],
+    [s.offRate === null ? '-' : s.offRate + '%', `${month} 휴방률`],
+    [s.streak + '일', s.streakKind === 'off' ? '현재 연속 휴방' : '현재 연속 방송'],
   ].map(([v, l]) => `<div class="stat"><b>${v}</b><span>${l}</span></div>`).join('');
 }
 
@@ -87,6 +89,7 @@ export function select(root, state, d) {
 
 export function shiftMonth(root, state, n) {
   state.view = addMonths(state.view, n);
+  renderStats(root, state);
   renderCalendar(root, state);
 }
 

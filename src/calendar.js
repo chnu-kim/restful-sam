@@ -42,12 +42,12 @@ export function dayStatus(d, { byDay, since, today }) {
   return 'off';
 }
 
-// 이번 달(오늘이 속한 달) 1일부터 오늘까지의 방송·휴방 일수. 휴방률은 판정된 날이 없으면 null
+// ym 달(기본: 오늘이 속한 달)의 1일부터 말일 또는 오늘까지의 방송·휴방 일수. 휴방률은 판정된 날이 없으면 null
 // 기록 시작 전 날짜는 방송 기록이 있어도 세지 않는다 (휴방 여부를 모르는 날과 같은 기준으로 맞춤)
-export function computeStats(ctx) {
+export function computeStats(ctx, ym = ctx.today.slice(0, 7)) {
   let on = 0;
   let off = 0;
-  for (const d of monthDays(ctx.today.slice(0, 7))) {
+  for (const d of monthDays(ym)) {
     if (d > ctx.today) break;
     if (d < ctx.since) continue;
     const s = dayStatus(d, ctx);
@@ -81,4 +81,10 @@ export function monthDays(ym) {
   const [y, m] = ym.split('-').map(Number);
   const count = new Date(Date.UTC(y, m, 0)).getUTCDate();
   return Array.from({ length: count }, (_, i) => `${ym}-${String(i + 1).padStart(2, '0')}`);
+}
+
+// 통계 라벨용 월 표기. 올해가 아니면 연도를 붙인다
+export function monthLabel(ym, today) {
+  const [y, m] = ym.split('-').map(Number);
+  return ym.slice(0, 4) === today.slice(0, 4) ? `${m}월` : `${y}년 ${m}월`;
 }

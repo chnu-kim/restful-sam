@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-  addDays, addMonths, computeStats, currentStreak, dayOfWeek, dayStatus, esc, firstMonth, groupByDay, hm, monthDays, todayKst,
+  addDays, addMonths, computeStats, currentStreak, dayOfWeek, dayStatus, esc, firstMonth, groupByDay, hm, monthDays, monthLabel, todayKst,
 } from '../../src/calendar.js';
 
 const s = (openDate, closeDate = null) => ({ openDate, closeDate, title: 't', category: null });
@@ -74,7 +74,7 @@ describe('dayStatus', () => {
   });
 });
 
-describe('computeStats (이번 달) / currentStreak', () => {
+describe('computeStats (월별) / currentStreak', () => {
   it('이번 달 1일부터 오늘까지만 세고, 미정인 오늘은 제외한다', () => {
     const ctx = ctxOf([s('2026-09-25 10:00:00'), s('2026-10-02 10:00:00')], '2026-09-25', '2026-10-03');
     expect(computeStats(ctx)).toEqual({ on: 1, off: 1, offRate: 50, streak: 1, streakKind: 'on' });
@@ -105,6 +105,16 @@ describe('computeStats (이번 달) / currentStreak', () => {
     expect(computeStats(ctx)).toMatchObject({ on: 0, off: 2, offRate: 100 });
   });
 
+  it('지난 달을 지정하면 그 달 말일까지 센다 (9/25 방송, 9/26~30 휴방)', () => {
+    const ctx = ctxOf([s('2026-09-25 10:00:00')], '2026-09-25', '2026-10-02');
+    expect(computeStats(ctx, '2026-09')).toEqual({ on: 1, off: 5, offRate: 83, streak: 6, streakKind: 'off' });
+  });
+
+  it('기록 시작 전의 달은 판정이 없어 휴방률 null', () => {
+    const ctx = ctxOf([s('2026-08-10 10:00:00')], '2026-09-25', '2026-10-02');
+    expect(computeStats(ctx, '2026-08')).toMatchObject({ on: 0, off: 0, offRate: null });
+  });
+
   it('기록 첫날이 오늘이고 미정이면 0일·null', () => {
     const ctx = ctxOf([], '2026-10-02', '2026-10-02');
     expect(computeStats(ctx)).toEqual({ on: 0, off: 0, offRate: null, streak: 0, streakKind: null });
@@ -113,6 +123,13 @@ describe('computeStats (이번 달) / currentStreak', () => {
   it('연속 기록은 기록 시작 전(nodata)에서 멈춘다', () => {
     const ctx = ctxOf([], '2026-10-01', '2026-10-03');
     expect(currentStreak(ctx)).toEqual({ streak: 2, streakKind: 'off' });
+  });
+});
+
+describe('monthLabel', () => {
+  it('올해면 월만, 다른 해면 연도까지', () => {
+    expect(monthLabel('2026-09', '2026-10-02')).toBe('9월');
+    expect(monthLabel('2025-12', '2026-01-03')).toBe('2025년 12월');
   });
 });
 

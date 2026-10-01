@@ -43,7 +43,7 @@ test('오늘 아직 방송 전이면 미정, 어제 휴방 안내와 통계', as
   await expect(page).toHaveTitle('삼덕이 휴방 체크');
   await expect(page.locator('#today .verdict')).toHaveText('아직 안 켬');
   await expect(page.locator('#today .detail')).toHaveText('어제는 휴방이었어요.');
-  await expect(page.locator('.stat')).toHaveText(['0일이번 달 방송한 날', '1일이번 달 휴방한 날', '100%이번 달 휴방률', '1일연속 휴방']);
+  await expect(page.locator('.stat')).toHaveText(['0일10월 방송한 날', '1일10월 휴방한 날', '100%10월 휴방률', '1일현재 연속 휴방']);
   await expect(day(page, '2026-10-02')).toHaveClass(/pending/);
   await expect(day(page, '2026-10-03')).toBeDisabled();
   await expect(page.locator('#footer')).toContainText('2026-10-01부터 기록');
@@ -79,11 +79,14 @@ test('날짜를 누르면 상세가 나오고, 선택이 바뀐다', async ({ pa
 });
 
 test('월 이동 버튼은 기록 범위 안에서만 동작한다', async ({ page }) => {
-  await open(page);
+  await open(page, { data: { ...BASE, since: '2026-09-25' } });
   await expect(page.locator('#month')).toHaveText('2026년 10월');
   await expect(page.locator('#next')).toBeDisabled();
   await page.locator('#prev').click();
   await expect(page.locator('#month')).toHaveText('2026년 9월');
+  await expect(page.locator('.stat').first()).toHaveText('1일9월 방송한 날');
+  await expect(page.locator('.stat').nth(2)).toHaveText('83%9월 휴방률');
+  await expect(page.locator('.stat').nth(3)).toHaveText('6일현재 연속 휴방');
   await expect(page.locator('#prev')).toBeDisabled();
   await page.locator('#next').click();
   await expect(page.locator('#month')).toHaveText('2026년 10월');
@@ -112,6 +115,15 @@ test('모바일 폭에서 가로 스크롤이 없다', async ({ page }) => {
   await expect(page.locator('#grid .day').first()).toBeVisible();
   const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
   expect(overflow).toBeLessThanOrEqual(0);
+});
+
+test('달력 칸이 달력 영역 밖으로 넘치지 않는다', async ({ page }) => {
+  await open(page);
+  const grid = await page.locator('#grid').boundingBox();
+  for (const d of ['2026-10-03', '2026-10-31']) {
+    const box = await day(page, d).boundingBox();
+    expect(box.x + box.width).toBeLessThanOrEqual(grid.x + grid.width + 0.5);
+  }
 });
 
 test('콘솔 오류 없이 로드된다', async ({ page }) => {
