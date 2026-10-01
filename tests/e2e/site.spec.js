@@ -96,6 +96,20 @@ for (const width of [360, 1024]) {
   });
 }
 
+test('테마 버튼으로 라이트/다크를 바꾸고, 새로고침해도 유지된다', async ({ page }) => {
+  await page.emulateMedia({ colorScheme: 'dark' });
+  await open(page);
+  const bg = () => page.evaluate(() => getComputedStyle(document.body).backgroundColor);
+  expect(await bg()).toBe('rgb(20, 20, 19)'); // 기기 설정(다크)을 따른다
+  await page.locator('#theme').click();
+  expect(await bg()).toBe('rgb(246, 245, 241)');
+  await expect(page.locator('#theme')).toHaveAttribute('aria-label', '다크 모드로 전환');
+  await page.reload();
+  expect(await bg()).toBe('rgb(246, 245, 241)');
+  await page.locator('#theme').click();
+  expect(await bg()).toBe('rgb(20, 20, 19)');
+});
+
 test('수집이 멈추면 지연 안내와 미확인 표시', async ({ page }) => {
   await open(page, { now: '2026-10-06 12:00:00' });
   await expect(page.locator('#today .stale')).toContainText('마지막 자동 확인이 2026-10-02');

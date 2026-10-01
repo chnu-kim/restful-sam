@@ -191,6 +191,37 @@ export function renderError(root) {
   root.getElementById('today').innerHTML = '<div class="label">데이터를 불러오지 못했어요.</div>';
 }
 
+export const THEME_KEY = 'theme';
+
+// 지금 보이는 테마: 고른 값(data-theme)이 있으면 그것, 없으면 기기 설정
+export function currentTheme(root, win) {
+  return root.documentElement.dataset.theme ?? (win.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+}
+
+// 테마 버튼: 누르면 지금 보이는 테마의 반대로 바꾸고 저장한다. 아이콘은 지금 테마(data-theme-now)를 따른다
+export function bindTheme(root = document, win = window) {
+  const btn = root.getElementById('theme');
+  const media = win.matchMedia('(prefers-color-scheme: dark)');
+  const sync = () => {
+    const now = currentTheme(root, win);
+    root.documentElement.dataset.themeNow = now;
+    btn.setAttribute('aria-label', now === 'dark' ? '라이트 모드로 전환' : '다크 모드로 전환');
+  };
+  btn.addEventListener('click', () => {
+    const next = currentTheme(root, win) === 'dark' ? 'light' : 'dark';
+    root.documentElement.dataset.theme = next;
+    try {
+      win.localStorage.setItem(THEME_KEY, next);
+    } catch {
+      // 저장이 막힌 환경에서도 이번 화면에선 바뀐다
+    }
+    sync();
+  });
+  // 고른 테마가 없을 때 기기 설정이 바뀌면 아이콘도 따라간다
+  media.addEventListener('change', sync);
+  sync();
+}
+
 export async function init(root = document, fetchImpl = fetch, now = Date.now()) {
   try {
     const res = await fetchImpl('data/streams.json', { cache: 'no-store' });

@@ -2,7 +2,7 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { bindHover, createState, init, renderAll, renderError, select, shiftMonth } from '../../src/app.js';
+import { bindHover, bindTheme, createState, init, renderAll, renderError, select, shiftMonth } from '../../src/app.js';
 
 // 실제 index.html의 마크업을 그대로 써서 id가 어긋나면 테스트가 깨지게 한다
 const MAIN = readFileSync(join(import.meta.dirname, '../../index.html'), 'utf8').match(/<main>[\s\S]*<\/main>/)[0];
@@ -368,5 +368,63 @@ describe('init', () => {
     expect(spy).toHaveBeenCalled();
     expect(state.today).toMatch(/^\d{4}-\d{2}-\d{2}$/);
     vi.restoreAllMocks();
+  });
+});
+
+describe('테마 전환', () => {
+  // jsdom에는 matchMedia가 없어 기기 설정과 저장소를 흉내 낸다
+  const fakeWindow = (systemDark, storage = new Map()) => {
+    const listeners = [];
+    const media = { matches: systemDark, addEventListener: (_, fn) => listeners.push(fn) };
+    return {
+      matchMedia: () => media,
+      localStorage: { setItem: (k, v) => storage.set(k, v) },
+      storage,
+      setSystem: (dark) => { media.matches = dark; listeners.forEach((fn) => fn()); },
+    };
+  };
+  const html = () => document.documentElement;
+
+  beforeEach(() => {
+    delete html().dataset.theme;
+    delete html().dataset.themeNow;
+  });
+
+  it('처음엔 기기 설정을 따르고, 누르면 반대 테마로 바꿔 저장한다', () => {
+    const win = fakeWindow(true);
+    bindTheme(document, win);
+    expect(html().dataset.themeNow).toBe('dark');
+    expect($('#theme').getAttribute('aria-label')).toBe('라이트 모드로 전환');
+    $('#theme').click();
+    expect(html().dataset.theme).toBe('light');
+    expect(html().dataset.themeNow).toBe('light');
+    expect(win.storage.get('theme')).toBe('light');
+    expect($('#theme').getAttribute('aria-label')).toBe('다크 모드로 전환');
+    $('#theme').click();
+    expect(html().dataset.theme).toBe('dark');
+  });
+
+  it('고른 테마가 없으면 기기 설정이 바뀔 때 따라가고, 고른 뒤에는 고정된다', () => {
+    const win = fakeWindow(false);
+    bindTheme(document, win);
+    expect(html().dataset.themeNow).toBe('light');
+    win.setSystem(true);
+    expect(html().dataset.themeNow).toBe('dark');
+    $('#theme').click();
+    win.setSystem(true);
+    expect(html().dataset.themeNow).toBe('light');
+  });
+
+  it('저장이 막혀도 화면 테마는 바뀐다', () => {
+    const win = { ...fakeWindow(false), localStorage: { setItem: () => { throw new Error('blocked'); } } };
+    bindTheme(document, win);
+    $('#theme').click();
+    expect(html().dataset.theme).toBe('dark');
+  });
+
+  it('저장된 테마(data-theme)가 기기 설정보다 우선한다', () => {
+    html().dataset.theme = 'light';
+    bindTheme(document, fakeWindow(true));
+    expect(html().dataset.themeNow).toBe('light');
   });
 });
