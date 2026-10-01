@@ -193,6 +193,60 @@ test('모바일 폭에서 가로 스크롤이 없다', async ({ page }) => {
   expect(overflow).toBeLessThanOrEqual(0);
 });
 
+test('320px에서 공백 없는 긴 영문 제목이어도 가로 스크롤이 없다', async ({ page }) => {
+  const long = 'a'.repeat(60);
+  await page.setViewportSize({ width: 320, height: 800 });
+  await open(page, { data: { ...BASE, streams: [st('2026-10-02 09:00:00', '2026-10-02 10:30:00', long)] } });
+  await expect(page.locator('#today .detail')).toContainText(long);
+  await day(page, '2026-10-02').click();
+  await expect(page.locator('#info')).toContainText(long);
+  const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
+  expect(overflow).toBeLessThanOrEqual(0);
+});
+
+test('320px에서도 미확인 표시가 한 줄로 보인다', async ({ page }) => {
+  await page.setViewportSize({ width: 320, height: 800 });
+  await open(page, { now: '2026-10-06 12:00:00' });
+  const mark = day(page, '2026-10-04').locator('.mark');
+  await expect(mark).toHaveText('미확인');
+  const lines = await mark.evaluate((el) => el.getBoundingClientRect().height / parseFloat(getComputedStyle(el).lineHeight));
+  expect(Math.round(lines)).toBe(1);
+});
+
+test('오늘(점선) 칸에 키보드로 포커스하면 포커스 링이 보인다', async ({ page }) => {
+  await open(page);
+  await day(page, '2026-10-01').focus();
+  await page.keyboard.press('Tab');
+  await expect(day(page, '2026-10-02')).toBeFocused();
+  const shadow = await day(page, '2026-10-02').evaluate((el) => getComputedStyle(el).boxShadow);
+  expect(shadow).not.toBe('none');
+});
+
+test('키보드로 날짜를 고르면 포커스가 같은 날짜에 남고 Tab이 다음 날로 간다', async ({ page }) => {
+  await open(page);
+  await day(page, '2026-10-01').focus();
+  await page.keyboard.press('Enter');
+  await expect(page.locator('#info')).toContainText('2026-10-01 (목)');
+  await expect(day(page, '2026-10-01')).toBeFocused();
+  await page.keyboard.press('Tab');
+  await expect(day(page, '2026-10-02')).toBeFocused();
+});
+
+test('마우스로 날짜를 누르면 포커스 링이 생기지 않는다', async ({ page }) => {
+  await open(page);
+  await day(page, '2026-10-01').click();
+  await expect(page.locator('#info')).toContainText('2026-10-01 (목)');
+  expect(await day(page, '2026-10-01').evaluate((el) => el.matches(':focus-visible'))).toBe(false);
+});
+
+test('이전 달 버튼이 비활성화되면 키보드 포커스가 다음 달 버튼으로 옮겨진다', async ({ page }) => {
+  await open(page);
+  await page.locator('#prev').focus();
+  await page.keyboard.press('Enter');
+  await expect(page.locator('#prev')).toBeDisabled();
+  await expect(page.locator('#next')).toBeFocused();
+});
+
 test('달력 칸이 달력 영역 밖으로 넘치지 않는다', async ({ page }) => {
   await open(page);
   const grid = await page.locator('#grid').boundingBox();
