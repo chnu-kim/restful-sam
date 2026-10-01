@@ -259,6 +259,8 @@ test('고대비(forced-colors) 모드에서도 선택된 칸의 키보드 포커
   await day(page, '2026-10-01').focus();
   await page.keyboard.press('Enter');
   await expect(day(page, '2026-10-01')).toBeFocused();
+  // 선택 표시(안쪽 outline)보다 포커스 규칙이 이기는지 보려면 실제로 선택된 칸이어야 한다
+  await expect(day(page, '2026-10-01')).toHaveAttribute('aria-pressed', 'true');
   // 고대비에선 box-shadow 링이 그려지지 않으므로 칸 바깥 outline으로 보여야 한다 (선택 표시는 안쪽 -2px)
   expect(await day(page, '2026-10-01').evaluate((el) => getComputedStyle(el).outlineOffset)).toBe('2px');
 });
