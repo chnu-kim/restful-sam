@@ -5,10 +5,9 @@
   "compatibility_date": "2026-10-01",
   "account_id": "fc7323801136ae087db0b88ab4d07b53",
   "workers_dev": true,
-  // 정적 페이지. 업로드할 파일은 .assetsignore의 허용 목록으로 제한한다.
-  // /data/*는 저장소의 백업 파일이 아니라 D1의 최신 기록을 내보내도록 Worker가 먼저 처리한다
+  // 정적 페이지는 public/만 올린다. /data/*는 D1의 최신 기록을 내보내도록 Worker가 먼저 처리한다
   "assets": {
-    "directory": ".",
+    "directory": "./public",
     "binding": "ASSETS",
     "run_worker_first": ["/data/*"]
   },

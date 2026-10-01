@@ -5,7 +5,7 @@ export default defineConfig({
     include: ['tests/unit/**/*.test.js'],
     coverage: {
       provider: 'v8',
-      include: ['worker/**/*.js', 'src/**/*.js'],
+      include: ['worker/**/*.js', 'public/src/**/*.js'],
       thresholds: { lines: 95, functions: 95, branches: 95, statements: 95 },
     },
   },
