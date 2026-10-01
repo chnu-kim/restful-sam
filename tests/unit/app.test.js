@@ -284,6 +284,19 @@ describe('달력', () => {
     expect($('#info li').textContent).toBe('20:00 ~ 약 20:09 · 약 9분A');
   });
 
+  it('방송 중 카테고리를 바꿨으면 구간별로 보여 준다', () => {
+    const x = {
+      ...st('2026-10-01 07:55:00', '2026-10-01 16:17:00', '엘밤통', 'ELDEN RING'),
+      categories: [{ from: '2026-10-01 07:55:00', category: '저스트 채팅' }, { from: '2026-10-01 09:10:00', category: 'ELDEN RING' }, { from: '2026-10-01 15:00:00', category: null }],
+    };
+    const live = { ...st('2026-10-02 20:00:00', null, '방송', 'b'), categories: [{ from: '2026-10-02 20:00:00', category: 'a' }, { from: '2026-10-02 21:00:00', category: '<b>b</b>' }] };
+    const state = mount({ ...DATA, streams: [x, live] }, KST('2026-10-02 21:30:00'));
+    select(document, state, '2026-10-01');
+    expect($('#info li .muted').innerHTML).toBe('07:55~09:10 저스트 채팅<br>09:10~15:00 ELDEN RING<br>15:00~16:17 카테고리 없음');
+    select(document, state, '2026-10-02');
+    expect($('#info li .muted').textContent).toBe('20:00~21:00 a21:00~ <b>b</b>');
+  });
+
   it('하루 여러 방송이면 각각의 시간과 합계', () => {
     const data = { ...DATA, streams: [st('2026-10-01 10:00:00', '2026-10-01 12:00:00', '아침'), st('2026-10-01 23:00:00', '2026-10-02 02:10:00', '심야')] };
     const state = mount(data, KST('2026-10-02 12:00:00'));

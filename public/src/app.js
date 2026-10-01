@@ -116,6 +116,18 @@ export function renderCalendar(root, state) {
 }
 
 // 날짜 상세. 아래 정보 칸과 마우스 툴팁이 같이 쓴다
+// 방송 중 카테고리를 바꿨으면 구간별로, 아니면 카테고리 하나를 괄호로 보여 준다
+function categoryText(x) {
+  if (x.categories?.length > 1) {
+    const parts = x.categories.map((c, i) => {
+      const end = x.categories[i + 1]?.from ?? x.closeDate;
+      return `${hm(c.from)}~${end ? hm(end) : ''} ${esc(c.category ?? '카테고리 없음')}`;
+    });
+    return `<div class="muted">${parts.join('<br>')}</div>`;
+  }
+  return x.category ? ` <span class="muted">(${esc(x.category)})</span>` : '';
+}
+
 export function dayDetail(state, d) {
   const streams = state.byDay.get(d) || [];
   const s = dayStatus(d, ctx(state));
@@ -125,7 +137,7 @@ export function dayDetail(state, d) {
       const time = x.closeDate
         ? `<b>${hm(x.openDate)} ~ ${approx(x)}${hm(x.closeDate)}</b> · ${approx(x)}${durationLong(streamMinutes(x))}`
         : `<b>${hm(x.openDate)} ~ ${x.ended ? '종료 시각 확인 중' : '방송 중'}</b>`;
-      return `<li>${time}<br>${esc(x.title)}${x.category ? ` <span class="muted">(${esc(x.category)})</span>` : ''}</li>`;
+      return `<li>${time}<br>${esc(x.title)}${categoryText(x)}</li>`;
     }).join('') + '</ul>';
     const total = dayMinutes(streams);
     if (streams.length > 1 && total !== null) body += `<div class="muted">총 ${durationLong(total)}</div>`;

@@ -151,6 +151,40 @@ describe('applyLiveStatus', () => {
     expect(c.streams[1]).toEqual({ openDate: '2026-10-02 20:15:00', closeDate: '2026-10-02 23:00:00', title: 'B', category: 'talk' });
   });
 
+  describe('방송 중 카테고리 변경', () => {
+    const at = (kst) => new Date(parseKst(kst)).toISOString();
+    const live = (category, extra = {}) => ({ ...OPEN, liveCategoryValue: category, ...extra });
+
+    it('바뀐 적이 없으면 기록하지 않는다', () => {
+      const a = applyLiveStatus(base, live('talk'), '2026-10-02', at('2026-10-02 20:01:00'));
+      const b = applyLiveStatus(a, live('talk'), '2026-10-02', at('2026-10-02 20:02:00'));
+      expect(b.streams[0]).not.toHaveProperty('categories');
+    });
+
+    it('바뀌면 시작부터의 구간과 바뀐 걸 확인한 시각부터의 구간을 남기고, 계속 쌓는다', () => {
+      let d = applyLiveStatus(base, live('talk'), '2026-10-02', at('2026-10-02 20:01:00'));
+      d = applyLiveStatus(d, live('ELDEN RING'), '2026-10-02', at('2026-10-02 21:10:00'));
+      expect(d.streams[0].categories).toEqual([
+        { from: '2026-10-02 20:00:00', category: 'talk' },
+        { from: '2026-10-02 21:10:00', category: 'ELDEN RING' },
+      ]);
+      expect(d.streams[0].category).toBe('ELDEN RING');
+      d = applyLiveStatus(d, live('ELDEN RING'), '2026-10-02', at('2026-10-02 21:11:00'));
+      expect(d.streams[0].categories).toHaveLength(2);
+      d = applyLiveStatus(d, live(''), '2026-10-02', at('2026-10-02 22:00:00'));
+      expect(d.streams[0].categories.at(-1)).toEqual({ from: '2026-10-02 22:00:00', category: null });
+    });
+
+    it('종료로 잡힐 때 기록은 유지되고, 마지막 확인 뒤에 바뀌었으면 종료 시각부터로 남긴다', () => {
+      let d = applyLiveStatus(base, live('talk'), '2026-10-02', at('2026-10-02 20:01:00'));
+      d = applyLiveStatus(d, live('ELDEN RING'), '2026-10-02', at('2026-10-02 21:10:00'));
+      const closed = applyLiveStatus(d, live('ELDEN RING', { status: 'CLOSE', closeDate: '2026-10-02 23:00:00' }), '2026-10-02', at('2026-10-02 23:01:00'));
+      expect(closed.streams[0].categories).toHaveLength(2);
+      const changed = applyLiveStatus(d, live('포 더 킹 2', { status: 'CLOSE', closeDate: '2026-10-02 23:00:00' }), '2026-10-02', at('2026-10-02 23:01:00'));
+      expect(changed.streams[0].categories.at(-1)).toEqual({ from: '2026-10-02 23:00:00', category: '포 더 킹 2' });
+    });
+  });
+
   it('새 방송은 추가되고 시작 시각 순으로 정렬된다', () => {
     const withNew = applyLiveStatus(base, OPEN, '2026-10-02');
     const withOld = applyLiveStatus(withNew, CLOSED, '2026-10-02');
