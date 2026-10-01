@@ -42,16 +42,18 @@ export function dayStatus(d, { byDay, since, today }) {
   return 'off';
 }
 
+// 이번 달(오늘이 속한 달) 1일부터 오늘까지의 방송·휴방 일수. 휴방률은 판정된 날이 없으면 null
 export function computeStats(ctx) {
   let on = 0;
   let off = 0;
-  for (let d = ctx.since; d <= ctx.today; d = addDays(d, 1)) {
+  for (const d of monthDays(ctx.today.slice(0, 7))) {
+    if (d > ctx.today) break;
     const s = dayStatus(d, ctx);
     if (s === 'on') on++;
     else if (s === 'off') off++;
   }
-  const rate = on + off ? Math.round((on / (on + off)) * 100) : 0;
-  return { on, off, rate, ...currentStreak(ctx) };
+  const offRate = on + off ? Math.round((off / (on + off)) * 100) : null;
+  return { on, off, offRate, ...currentStreak(ctx) };
 }
 
 // 오늘이 미정이면 어제부터 거슬러 올라가며 같은 상태가 이어진 일수를 센다

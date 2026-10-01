@@ -74,20 +74,40 @@ describe('dayStatus', () => {
   });
 });
 
-describe('computeStats / currentStreak', () => {
-  it('오늘이 미정이면 어제부터 연속 휴방을 센다', () => {
-    const ctx = ctxOf([s('2026-09-28 10:00:00')], '2026-09-28', '2026-10-02');
-    expect(computeStats(ctx)).toEqual({ on: 1, off: 3, rate: 25, streak: 3, streakKind: 'off' });
+describe('computeStats (이번 달) / currentStreak', () => {
+  it('이번 달 1일부터 오늘까지만 세고, 미정인 오늘은 제외한다', () => {
+    const ctx = ctxOf([s('2026-09-25 10:00:00'), s('2026-10-02 10:00:00')], '2026-09-25', '2026-10-03');
+    expect(computeStats(ctx)).toEqual({ on: 1, off: 1, offRate: 50, streak: 1, streakKind: 'on' });
   });
 
-  it('오늘 방송했으면 오늘부터 연속 방송을 센다', () => {
+  it('오늘 방송했으면 오늘도 방송한 날에 들어간다', () => {
     const ctx = ctxOf([s('2026-10-01 10:00:00'), s('2026-10-02 10:00:00')], '2026-09-30', '2026-10-02');
-    expect(computeStats(ctx)).toEqual({ on: 2, off: 1, rate: 67, streak: 2, streakKind: 'on' });
+    expect(computeStats(ctx)).toEqual({ on: 2, off: 0, offRate: 0, streak: 2, streakKind: 'on' });
   });
 
-  it('기록 첫날이 오늘이고 미정이면 0일·0%', () => {
+  it('휴방률은 반올림한다', () => {
+    const ctx = ctxOf([s('2026-10-01 10:00:00')], '2026-10-01', '2026-10-04');
+    expect(computeStats(ctx)).toMatchObject({ on: 1, off: 2, offRate: 67 });
+  });
+
+  it('연속 휴방은 달을 넘어서 센다', () => {
+    const ctx = ctxOf([], '2026-09-28', '2026-10-02');
+    expect(computeStats(ctx)).toEqual({ on: 0, off: 1, offRate: 100, streak: 4, streakKind: 'off' });
+  });
+
+  it('1일이고 아직 미정이면 이번 달 판정이 없어 휴방률은 null', () => {
+    const ctx = ctxOf([], '2026-09-25', '2026-10-01');
+    expect(computeStats(ctx)).toEqual({ on: 0, off: 0, offRate: null, streak: 6, streakKind: 'off' });
+  });
+
+  it('기록 시작이 이번 달 중간이면 그 전 날짜는 세지 않는다', () => {
+    const ctx = ctxOf([], '2026-10-05', '2026-10-07');
+    expect(computeStats(ctx)).toMatchObject({ on: 0, off: 2, offRate: 100 });
+  });
+
+  it('기록 첫날이 오늘이고 미정이면 0일·null', () => {
     const ctx = ctxOf([], '2026-10-02', '2026-10-02');
-    expect(computeStats(ctx)).toEqual({ on: 0, off: 0, rate: 0, streak: 0, streakKind: null });
+    expect(computeStats(ctx)).toEqual({ on: 0, off: 0, offRate: null, streak: 0, streakKind: null });
   });
 
   it('연속 기록은 기록 시작 전(nodata)에서 멈춘다', () => {
