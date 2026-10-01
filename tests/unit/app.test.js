@@ -371,69 +371,76 @@ describe('init', () => {
   });
 });
 
-describe('테마 전환', () => {
-  // jsdom에는 matchMedia가 없어 기기 설정과 저장소를 흉내 낸다
-  const fakeWindow = (systemDark, storage = new Map()) => {
-    const listeners = [];
-    const media = { matches: systemDark, addEventListener: (_, fn) => listeners.push(fn) };
-    return {
-      matchMedia: () => media,
-      localStorage: { setItem: (k, v) => storage.set(k, v) },
-      storage,
-      setSystem: (dark) => { media.matches = dark; listeners.forEach((fn) => fn()); },
-    };
-  };
+describe('테마 선택', () => {
+  const fakeWindow = (storage = new Map()) => ({
+    localStorage: { setItem: (k, v) => storage.set(k, v), removeItem: (k) => storage.delete(k) },
+    storage,
+  });
   const html = () => document.documentElement;
+  const item = (c) => $(`[data-choice="${c}"]`);
+  const checked = () => [...document.querySelectorAll('[data-choice]')].filter((b) => b.getAttribute('aria-checked') === 'true').map((b) => b.dataset.choice);
 
   beforeEach(() => {
     delete html().dataset.theme;
-    delete html().dataset.themeNow;
   });
 
-  it('처음엔 기기 설정을 따르고, 누르면 반대 테마로 바꿔 저장한다', () => {
-    const win = fakeWindow(true);
+  it('기본은 시스템이고, 메뉴에서 고르면 적용·저장하고 시스템을 고르면 저장을 지운다', () => {
+    const win = fakeWindow();
     bindTheme(document, win);
-    expect(html().dataset.themeNow).toBe('dark');
-    expect($('#theme').getAttribute('aria-label')).toBe('라이트 모드로 전환');
+    expect($('#theme').getAttribute('aria-label')).toBe('테마: 시스템');
+    expect(checked()).toEqual(['system']);
+
     $('#theme').click();
-    expect(html().dataset.theme).toBe('light');
-    expect(html().dataset.themeNow).toBe('light');
-    expect(win.storage.get('theme')).toBe('light');
-    expect($('#theme').getAttribute('aria-label')).toBe('다크 모드로 전환');
-    $('#theme').click();
+    expect($('#theme-menu').hidden).toBe(false);
+    expect($('#theme').getAttribute('aria-expanded')).toBe('true');
+    expect(document.activeElement).toBe(item('system'));
+    item('dark').click();
     expect(html().dataset.theme).toBe('dark');
+    expect(win.storage.get('theme')).toBe('dark');
+    expect($('#theme-menu').hidden).toBe(true);
+    expect($('#theme').getAttribute('aria-label')).toBe('테마: 다크');
+    expect(checked()).toEqual(['dark']);
+
+    $('#theme').click();
+    item('system').click();
+    expect(html().dataset.theme).toBeUndefined();
+    expect(win.storage.has('theme')).toBe(false);
+    expect(checked()).toEqual(['system']);
   });
 
-  it('고른 테마가 없으면 기기 설정이 바뀔 때 따라가고, 고른 뒤에는 고정된다', () => {
-    const win = fakeWindow(false);
-    bindTheme(document, win);
-    expect(html().dataset.themeNow).toBe('light');
-    win.setSystem(true);
-    expect(html().dataset.themeNow).toBe('dark');
+  it('저장된 테마로 시작하면 그 항목이 선택돼 있다', () => {
+    html().dataset.theme = 'light';
+    bindTheme(document, fakeWindow());
+    expect($('#theme').getAttribute('aria-label')).toBe('테마: 라이트');
+    expect(checked()).toEqual(['light']);
+  });
+
+  it('메뉴 밖을 누르거나 Esc를 누르면 닫히고, 메뉴 안 빈 곳은 무시한다', () => {
+    bindTheme(document, fakeWindow());
     $('#theme').click();
-    win.setSystem(true);
-    expect(html().dataset.themeNow).toBe('light');
+    $('#theme-menu').click();
+    expect($('#theme-menu').hidden).toBe(false);
+    $('#today').click();
+    expect($('#theme-menu').hidden).toBe(true);
+    $('#today').click(); // 닫힌 상태에선 그대로
+    expect($('#theme-menu').hidden).toBe(true);
+
+    $('#theme').click();
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter' }));
+    expect($('#theme-menu').hidden).toBe(false);
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+    expect($('#theme-menu').hidden).toBe(true);
+    expect(document.activeElement).toBe($('#theme'));
+    $('#theme').click();
+    $('#theme').click(); // 다시 누르면 닫힘
+    expect($('#theme-menu').hidden).toBe(true);
   });
 
   it('저장이 막혀도 화면 테마는 바뀐다', () => {
-    const win = { ...fakeWindow(false), localStorage: { setItem: () => { throw new Error('blocked'); } } };
-    bindTheme(document, win);
+    const blocked = { localStorage: { setItem: () => { throw new Error('blocked'); } } };
+    bindTheme(document, blocked);
     $('#theme').click();
+    item('dark').click();
     expect(html().dataset.theme).toBe('dark');
-  });
-
-  it('옛 Safari처럼 addListener만 있어도 기기 설정 변경을 따라간다', () => {
-    const listeners = [];
-    const media = { matches: false, addListener: (fn) => listeners.push(fn) };
-    bindTheme(document, { matchMedia: () => media, localStorage: { setItem() {} } });
-    media.matches = true;
-    listeners.forEach((fn) => fn());
-    expect(html().dataset.themeNow).toBe('dark');
-  });
-
-  it('저장된 테마(data-theme)가 기기 설정보다 우선한다', () => {
-    html().dataset.theme = 'light';
-    bindTheme(document, fakeWindow(true));
-    expect(html().dataset.themeNow).toBe('light');
   });
 });
