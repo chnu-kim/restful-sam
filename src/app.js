@@ -24,7 +24,7 @@ const isLiveFresh = (state) => state.now - Date.parse(state.data.liveCheckedAt ?
 
 function findLiveStream(state) {
   if (!state.data.live || !isLiveFresh(state)) return null;
-  return state.data.streams.findLast((s) => !s.closeDate) ?? null;
+  return state.data.streams.findLast((s) => !s.closeDate && !s.ended) ?? null;
 }
 
 function startedAt(openDate, today) {
@@ -55,7 +55,7 @@ export function renderToday(root, state) {
   } else if (streams.length) {
     verdict = '방송함';
     cls = 'on';
-    detail = streams.map((s) => `${hm(s.openDate)}~${hm(s.closeDate)} · ${esc(s.title)}`).join('<br>');
+    detail = streams.map((s) => `${hm(s.openDate)}~${s.ended ? '확인 중' : hm(s.closeDate)} · ${esc(s.title)}`).join('<br>');
   } else {
     verdict = '아직 안 켬';
     cls = 'pending';
@@ -119,7 +119,7 @@ export function dayDetail(state, d) {
     body = '<ul>' + streams.map((x) => {
       const time = x.closeDate
         ? `<b>${hm(x.openDate)} ~ ${hm(x.closeDate)}</b> · ${durationLong(streamMinutes(x))}`
-        : `<b>${hm(x.openDate)} ~ 방송 중</b>`;
+        : `<b>${hm(x.openDate)} ~ ${x.ended ? '종료 시각 확인 중' : '방송 중'}</b>`;
       return `<li>${time}<br>${esc(x.title)}${x.category ? ` <span class="muted">(${esc(x.category)})</span>` : ''}</li>`;
     }).join('') + '</ul>';
     const total = dayMinutes(streams);

@@ -83,16 +83,27 @@ export function applyLiveStatus(data, live, today, checkedAt = null) {
     const idx = next.streams.findIndex((s) => s.openDate === stream.openDate);
     if (idx === -1) next.streams.push(stream);
     else next.streams[idx] = stream;
+    // live-status는 마지막 방송만 알려준다. 그보다 먼저 시작해 아직 열려 있는 방송은 두 확인 사이에 끝난 것이므로
+    // 끝났다고(ended) 표시하고, 종료 시각은 다시보기 보충에서 채운다
+    next.streams = next.streams.map((s) =>
+      !s.closeDate && !s.ended && s.openDate < stream.openDate ? { ...s, ended: true } : s,
+    );
     sortStreams(next.streams);
   }
   return next;
 }
 
 const MATCH_WINDOW_MS = 30 * 60 * 1000;
+// 상세의 시작 시각과 저장된 시작 시각이 이만큼 이내면 같은 방송으로 본다 (API 간 초 단위 차이 허용).
+// 끊겼다 다시 켠 방송을 구분해야 해서 위 추정 범위보다 훨씬 좁게 둔다
+const SAME_STREAM_MS = 2 * 60 * 1000;
+const closest = (times, t) =>
+  times.filter((x) => Math.abs(x - t) <= SAME_STREAM_MS).sort((a, b) => Math.abs(a - t) - Math.abs(b - t))[0];
 export const MAX_DETAIL_CALLS = 3;
 
-// live-status는 마지막 방송만 알려주므로, 수집이 하루 이상 멈춘 사이의 방송은 다시보기로 보충한다.
-// 이미 아는 방송(추정 시작 시각 ±30분)은 건너뛰고, 새로 넣기만 하며 기존 항목은 덮어쓰지 않는다.
+// live-status는 마지막 방송만 알려주므로, 놓친 방송과 끝났는데 종료 시각을 모르는 방송(ended)을 다시보기로 보충한다.
+// 이미 아는 방송(추정 시작 시각 ±30분)은 건너뛰되, 종료 시각을 채워야 하는 방송 근처면 상세의 정확한 시작 시각으로 맞춘다.
+// 그 외 기존 항목은 덮어쓰지 않는다
 export async function backfillFromReplays(data, { fetchImpl = fetch, serviceBase = DEFAULT_SERVICE_BASE } = {}) {
   const list = await fetchContent(
     fetchImpl,
@@ -100,27 +111,40 @@ export async function backfillFromReplays(data, { fetchImpl = fetch, serviceBase
     'videos',
   );
   const known = data.streams.map((s) => parseKst(s.openDate));
+  const pending = data.streams.filter((s) => s.ended && !s.closeDate).map((s) => parseKst(s.openDate));
   const added = [];
+  const closed = new Map(); // 저장된 시작 시각(ms) -> 채울 종료 시각
   let calls = 0;
   for (const v of list.data ?? []) {
     if (v.videoType !== 'REPLAY' || !v.publishDate || !v.duration) continue;
     const estimated = parseKst(v.publishDate) - v.duration * 1000;
-    if (known.some((t) => Math.abs(t - estimated) <= MATCH_WINDOW_MS)) continue;
+    const near = (t) => Math.abs(t - estimated) <= MATCH_WINDOW_MS;
+    if (known.some(near) && !pending.some(near)) continue;
     if (calls >= MAX_DETAIL_CALLS) break;
     calls++;
     const detail = await fetchContent(fetchImpl, `${serviceBase}/v3/videos/${v.videoNo}`, 'video');
     const openDate = detail.liveOpenDate;
-    if (!openDate || known.includes(parseKst(openDate))) continue;
-    added.push({
-      openDate,
-      closeDate: formatKst(parseKst(openDate) + v.duration * 1000),
-      title: v.videoTitle ?? '',
-      category: v.videoCategoryValue || null,
-    });
-    known.push(parseKst(openDate));
+    if (!openDate) continue;
+    const closeDate = formatKst(parseKst(openDate) + v.duration * 1000);
+    const t = parseKst(openDate);
+    const match = closest(pending, t);
+    if (match !== undefined) {
+      closed.set(match, closeDate);
+      pending.splice(pending.indexOf(match), 1);
+      continue;
+    }
+    if (closest(known, t) !== undefined) continue;
+    added.push({ openDate, closeDate, title: v.videoTitle ?? '', category: v.videoCategoryValue || null });
+    known.push(t);
   }
-  if (!added.length) return data;
-  return { ...data, streams: sortStreams([...data.streams, ...added]) };
+  if (!added.length && !closed.size) return data;
+  const streams = data.streams.map((s) => {
+    const closeDate = closed.get(parseKst(s.openDate));
+    if (!closeDate) return s;
+    const { ended, ...rest } = s;
+    return { ...rest, closeDate };
+  });
+  return { ...data, streams: sortStreams([...streams, ...added]) };
 }
 
 export async function run({

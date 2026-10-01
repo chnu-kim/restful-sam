@@ -261,6 +261,20 @@ describe('달력', () => {
     expect(document.querySelectorAll('#info li b')).toHaveLength(1);
   });
 
+  it('끊겨서 다시 켠 경우: 끝났지만 종료 시각을 모르는 방송은 \'방송 중\'이 아니라 \'확인 중\'', () => {
+    const data = {
+      ...DATA, live: true, liveCheckedAt: at('2026-10-02 21:07:00'),
+      streams: [{ ...st('2026-10-02 20:00:00', null, 'A'), ended: true }, st('2026-10-02 20:15:00', null, 'B')],
+    };
+    const state = mount(data, KST('2026-10-02 21:30:00'));
+    expect($('#today .detail').textContent).toBe('20:15 시작 · B');
+    select(document, state, '2026-10-02');
+    expect([...document.querySelectorAll('#info li')].map((e) => e.textContent)).toEqual(['20:00 ~ 종료 시각 확인 중A', '20:15 ~ 방송 중B']);
+    // 방송이 끝나 live가 꺼진 뒤 오늘 카드
+    mount({ ...data, live: false, streams: [data.streams[0], st('2026-10-02 20:15:00', '2026-10-02 23:00:00', 'B')] }, KST('2026-10-02 23:30:00'));
+    expect($('#today .detail').innerHTML).toBe('20:00~확인 중 · A<br>20:15~23:00 · B');
+  });
+
   it('하루 여러 방송이면 각각의 시간과 합계', () => {
     const data = { ...DATA, streams: [st('2026-10-01 10:00:00', '2026-10-01 12:00:00', '아침'), st('2026-10-01 23:00:00', '2026-10-02 02:10:00', '심야')] };
     const state = mount(data, KST('2026-10-02 12:00:00'));
