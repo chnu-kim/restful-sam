@@ -25,14 +25,16 @@ async function open(page, { data = BASE, now = '2026-10-02 12:00:00', status = 2
 
 const day = (page, d) => page.locator(`[data-d="${d}"]`);
 
-test('실제 저장된 데이터: 9/25 방송, 9/26~10/1 휴방', async ({ page }) => {
-  expect(REAL_DATA.since <= '2026-09-26').toBe(true);
+test('실제 저장된 데이터: 9/24·9/25 방송, 9/26~10/1 휴방', async ({ page }) => {
+  expect(REAL_DATA.since <= '2026-09-24').toBe(true);
   await page.clock.setFixedTime(KST('2026-10-02 12:00:00'));
   await page.goto('/'); // route 없이 저장소의 data/streams.json을 그대로 사용
   await expect(day(page, '2026-10-01')).toHaveClass(/\boff\b/);
   await expect(day(page, '2026-10-01')).toContainText('휴방');
   await page.locator('#prev').click();
+  await expect(day(page, '2026-09-24')).toHaveClass(/\bon\b/);
   await expect(day(page, '2026-09-25')).toHaveClass(/\bon\b/);
+  await expect(page.locator('.stat').first()).toHaveText('2일9월 방송한 날');
   for (const d of ['2026-09-26', '2026-09-27', '2026-09-28', '2026-09-29', '2026-09-30']) {
     await expect(day(page, d)).toHaveClass(/\boff\b/);
   }

@@ -1,9 +1,15 @@
 {
   "channelId": "86d3d8d5997609df783949d107fbde24",
-  "since": "2026-09-25",
+  "since": "2026-09-24",
   "lastCheckedDate": "2026-10-02",
   "live": false,
   "streams": [
+    {
+      "openDate": "2026-09-24 07:55:37",
+      "closeDate": "2026-09-24 16:17:09",
+      "title": "엘밤통 DLC (w. 문서희, 차양)│ 삼덕이",
+      "category": "ELDEN RING 밤의 통치자"
+    },
     {
       "openDate": "2026-09-25 08:49:35",
       "closeDate": "2026-09-25 15:24:35",
