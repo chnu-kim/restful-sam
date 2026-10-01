@@ -15,17 +15,20 @@ export function createState(data, now = Date.now()) {
 
 const ctx = (state) => state.ctx;
 
-// 매시간 수집 + cron 지연 여유
-export const LIVE_FRESH_MS = 2 * 60 * 60 * 1000;
+// 1분마다 수집 + 지연 여유
+export const LIVE_FRESH_MS = 10 * 60 * 1000;
 
 // 자정을 넘긴 방송은 시작일(어제)에 속하므로 오늘 목록이 아니라 전체에서 열린 방송을 찾는다.
-// 수집이 멈춰 live가 남아 있을 수 있으니 최근(2시간 이내)에 방송 중으로 확인된 경우만 믿는다
+// 수집이 멈춰 live가 남아 있을 수 있으니 최근(10분 이내)에 방송 중으로 확인된 경우만 믿는다
 const isLiveFresh = (state) => state.now - Date.parse(state.data.liveCheckedAt ?? '') <= LIVE_FRESH_MS;
 
 function findLiveStream(state) {
   if (!state.data.live || !isLiveFresh(state)) return null;
   return state.data.streams.findLast((s) => !s.closeDate && !s.ended) ?? null;
 }
+
+// 종료를 놓쳐 마지막으로 본 시각으로 추정한 종료 시각에는 '약'을 붙인다
+const approx = (s) => (s.closeApprox ? '약 ' : '');
 
 function startedAt(openDate, today) {
   const d = openDate.slice(0, 10);
@@ -36,7 +39,7 @@ function startedAt(openDate, today) {
 
 function staleNotice(state) {
   if (state.data.live && !isLiveFresh(state)) {
-    return '<div class="stale">방송 중이었지만 최근 2시간 동안 상태를 확인하지 못해 최신 정보가 아닐 수 있어요.</div>';
+    return '<div class="stale">방송 중이었지만 최근 10분 동안 상태를 확인하지 못해 최신 정보가 아닐 수 있어요.</div>';
   }
   if (state.lastChecked && state.lastChecked >= addDays(state.today, -1)) return '';
   const when = state.lastChecked ? `마지막 자동 확인이 ${state.lastChecked}이라` : '자동 확인 기록이 없어';
@@ -55,7 +58,7 @@ export function renderToday(root, state) {
   } else if (streams.length) {
     verdict = '방송함';
     cls = 'on';
-    detail = streams.map((s) => `${hm(s.openDate)}~${s.ended ? '확인 중' : hm(s.closeDate)} · ${esc(s.title)}`).join('<br>');
+    detail = streams.map((s) => `${hm(s.openDate)}~${s.ended ? '확인 중' : approx(s) + hm(s.closeDate)} · ${esc(s.title)}`).join('<br>');
   } else {
     verdict = '아직 안 켬';
     cls = 'pending';
@@ -118,7 +121,7 @@ export function dayDetail(state, d) {
   if (streams.length) {
     body = '<ul>' + streams.map((x) => {
       const time = x.closeDate
-        ? `<b>${hm(x.openDate)} ~ ${hm(x.closeDate)}</b> · ${durationLong(streamMinutes(x))}`
+        ? `<b>${hm(x.openDate)} ~ ${approx(x)}${hm(x.closeDate)}</b> · ${approx(x)}${durationLong(streamMinutes(x))}`
         : `<b>${hm(x.openDate)} ~ ${x.ended ? '종료 시각 확인 중' : '방송 중'}</b>`;
       return `<li>${time}<br>${esc(x.title)}${x.category ? ` <span class="muted">(${esc(x.category)})</span>` : ''}</li>`;
     }).join('') + '</ul>';
@@ -184,7 +187,7 @@ export function renderAll(root, state) {
   renderStats(root, state);
   renderCalendar(root, state);
   root.getElementById('footer').textContent =
-    `${state.data.since}부터 기록 · 매시간 자동 확인 · 마지막 확인일 ${state.lastChecked ?? '-'}`;
+    `${state.data.since}부터 기록 · 1분마다 자동 확인 · 마지막 확인일 ${state.lastChecked ?? '-'}`;
 }
 
 export function renderError(root) {

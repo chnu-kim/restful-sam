@@ -1,0 +1,36 @@
+name: 데이터 백업
+
+on:
+  schedule:
+    - cron: '17 15 * * *' # 매일 00:17 KST
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  # 방송 기록은 Cloudflare D1에만 있으므로, 하루 한 번 저장소의 data/streams.json으로 백업한다
+  backup:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: 최신 기록 받기
+        run: |
+          curl -fsS https://restful-sam.chanwoos-account.workers.dev/data/streams.json -o /tmp/streams.json
+          # 형식이 맞을 때만 덮어쓴다
+          node -e "
+            const d = JSON.parse(require('fs').readFileSync('/tmp/streams.json', 'utf8'));
+            if (!Array.isArray(d.streams) || typeof d.since !== 'string') throw new Error('형식 오류');
+            require('fs').writeFileSync('data/streams.json', JSON.stringify(d, null, 2) + '\n');
+          "
+      - name: 바뀌었으면 커밋
+        run: |
+          if git diff --quiet; then exit 0; fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add data/streams.json
+          git commit -m "data: $(TZ=Asia/Seoul date '+%Y-%m-%d') 방송 기록 백업"
+          git push
