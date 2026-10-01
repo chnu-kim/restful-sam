@@ -255,11 +255,29 @@ describe('달력', () => {
   });
 
   it('방송 중인 날의 상세, 카테고리 없음, XSS 이스케이프', () => {
-    const data = { ...DATA, live: true, streams: [st('2026-10-02 20:00:00', null, '<b>x</b>')] };
+    const data = { ...DATA, live: true, liveCheckedAt: at('2026-10-02 20:59:00'), streams: [st('2026-10-02 20:00:00', null, '<b>x</b>')] };
     const state = mount(data, KST('2026-10-02 21:00:00'));
     select(document, state, '2026-10-02');
     expect($('#info li').textContent).toBe('20:00 ~ 방송 중<b>x</b>');
     expect(document.querySelectorAll('#info li b')).toHaveLength(1);
+  });
+
+  it('최근 10분 안에 방송 중으로 확인되지 않은 열린 방송은 \'방송 중\'이라고 하지 않는다', () => {
+    const open = { ...st('2026-10-02 20:00:00', null, 'A'), categories: [{ from: '2026-10-02 20:00:00', category: 'a' }, { from: '2026-10-02 21:00:00', category: 'b' }] };
+    const cases = [
+      // 수집이 멈춰 live가 오래됨
+      { ...DATA, live: true, liveCheckedAt: at('2026-10-02 21:00:00'), streams: [open] },
+      // live가 꺼졌는데 종료 시각이 아직 없음
+      { ...DATA, live: false, liveCheckedAt: at('2026-10-02 21:29:00'), streams: [open] },
+    ];
+    for (const data of cases) {
+      const state = mount(data, KST('2026-10-02 21:30:00'));
+      expect($('#today .verdict').textContent).toBe('방송함');
+      expect($('#today .detail').innerHTML).toBe('20:00~확인 중 · A');
+      select(document, state, '2026-10-02');
+      expect($('#info li b').textContent).toBe('20:00 ~ 종료 시각 확인 중');
+      expect($('#info li .muted').innerHTML).toBe('20:00~21:00 a<br>21:00~확인 중 b');
+    }
   });
 
   it('끊겨서 다시 켠 경우: 끝났지만 종료 시각을 모르는 방송은 \'방송 중\'이 아니라 \'확인 중\'', () => {
@@ -290,7 +308,7 @@ describe('달력', () => {
       categories: [{ from: '2026-10-01 07:55:00', category: '저스트 채팅' }, { from: '2026-10-01 09:10:00', category: 'ELDEN RING' }, { from: '2026-10-01 15:00:00', category: null }],
     };
     const live = { ...st('2026-10-02 20:00:00', null, '방송', 'b'), categories: [{ from: '2026-10-02 20:00:00', category: 'a' }, { from: '2026-10-02 21:00:00', category: '<b>b</b>' }] };
-    const state = mount({ ...DATA, streams: [x, live] }, KST('2026-10-02 21:30:00'));
+    const state = mount({ ...DATA, live: true, liveCheckedAt: at('2026-10-02 21:29:00'), streams: [x, live] }, KST('2026-10-02 21:30:00'));
     select(document, state, '2026-10-01');
     expect($('#info li .muted').innerHTML).toBe('07:55~09:10 저스트 채팅<br>09:10~15:00 ELDEN RING<br>15:00~16:17 카테고리 없음');
     select(document, state, '2026-10-02');
@@ -325,6 +343,41 @@ describe('달력', () => {
     select(document, state, '2026-10-01');
     expect([...document.querySelectorAll('#info li')].map((e) => e.textContent)).toEqual(['10:00 ~ 12:00 · 2시간아침', '23:00 ~ 02:10 · 3시간 10분심야']);
     expect($('#info > .muted').textContent).toBe('총 5시간 10분');
+  });
+
+  it('상세 칸은 바뀌면 스크린 리더가 읽어 준다', () => {
+    expect($('#info').getAttribute('aria-live')).toBe('polite');
+  });
+
+  it('키보드로 날짜를 고르면 다시 그린 뒤에도 같은 날짜에 포커스가 남는다', () => {
+    mount(DATA, KST('2026-10-02 12:00:00'));
+    const old = day('2026-10-01');
+    const focus = vi.spyOn(HTMLElement.prototype, 'focus');
+    old.focus();
+    focus.mockClear();
+    old.click();
+    expect(day('2026-10-01')).not.toBe(old);
+    expect(document.activeElement).toBe(day('2026-10-01'));
+    expect(focus).toHaveBeenCalledWith({ preventScroll: true });
+    focus.mockRestore();
+  });
+
+  it('포커스가 달력 밖에 있었으면 날짜를 골라도 포커스를 옮기지 않는다', () => {
+    const state = mount(DATA, KST('2026-10-02 12:00:00'));
+    $('#prev').focus();
+    select(document, state, '2026-10-01');
+    expect(document.activeElement).toBe($('#prev'));
+  });
+
+  it('월 이동 버튼이 끝 달에 닿아 비활성화되면 포커스를 반대쪽 버튼으로 옮긴다', () => {
+    const state = mount(DATA, KST('2026-10-02 12:00:00'));
+    $('#prev').focus();
+    shiftMonth(document, state, -1);
+    expect($('#prev').disabled).toBe(true);
+    expect(document.activeElement).toBe($('#next'));
+    shiftMonth(document, state, 1);
+    expect($('#next').disabled).toBe(true);
+    expect(document.activeElement).toBe($('#prev'));
   });
 
   it('누르면 상세 칸을 화면 안으로 끌어온다', () => {

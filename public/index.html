@@ -19,12 +19,15 @@
     --bg: #f6f5f1;
     --surface: #ffffff;
     --text: #1d1d1b;
-    --muted: #77756e;
+    --muted: #68665f;
     --line: #e3e1d9;
     --on: #00b36b;
+    /* 글자용 초록·빨강: 연한 배경·흰 바탕에서도 대비 4.5:1을 넘도록 채움색보다 진하게 */
+    --on-text: #007a48;
     --on-soft: #d6f5e6;
     --on-fill: #86dbb2;
     --off: #e5484d;
+    --off-text: #c4272d;
     --off-soft: #fde2e2;
     --pending: #b8b4a8;
     --none: #eeece6;
@@ -39,9 +42,11 @@
       --muted: #9a988f;
       --line: #2f2e2b;
       --on: #1fd286;
+      --on-text: #1fd286;
       --on-soft: #143a29;
       --on-fill: #23774f;
       --off: #ff6b6f;
+      --off-text: #ff6b6f;
       --off-soft: #3d1c1d;
       --pending: #6b685f;
       --none: #262523;
@@ -55,9 +60,11 @@
     --muted: #9a988f;
     --line: #2f2e2b;
     --on: #1fd286;
+    --on-text: #1fd286;
     --on-soft: #143a29;
     --on-fill: #23774f;
     --off: #ff6b6f;
+    --off-text: #ff6b6f;
     --off-soft: #3d1c1d;
     --pending: #6b685f;
     --none: #262523;
@@ -90,9 +97,9 @@
   }
   .today .label { color: var(--muted); font-size: 14px; }
   .today .verdict { font-size: 40px; font-weight: 700; letter-spacing: -0.03em; margin: 4px 0; }
-  .today .detail { color: var(--muted); font-size: 14px; }
-  .today .stale { margin-top: 12px; font-size: 13px; color: var(--off); }
-  .verdict.on { color: var(--on); }
+  .today .detail { color: var(--muted); font-size: 14px; overflow-wrap: anywhere; }
+  .today .stale { margin-top: 12px; font-size: 13px; color: var(--off-text); }
+  .verdict.on { color: var(--on-text); }
   .verdict.off { color: var(--off); }
   .verdict.pending { color: var(--muted); }
   .live-dot {
@@ -124,13 +131,16 @@
     font: inherit; font-size: 13px; text-align: left; color: var(--text);
     background: var(--none); cursor: pointer;
   }
-  .day .mark { font-size: 11px; font-weight: 600; }
+  /* 320px 폭에서도 '미확인'이 두 줄로 나뉘지 않게 한다 */
+  .day .mark { font-size: 11px; font-weight: 600; white-space: nowrap; }
+  /* 키보드 포커스는 칸 바깥 링으로 그려, 오늘(점선)·선택(실선) outline과 겹치지 않게 한다 */
+  .day:focus-visible { outline: 2px solid transparent; position: relative; z-index: 1; box-shadow: 0 0 0 2px var(--surface), 0 0 0 4px var(--text); }
   .day.on { background: var(--on-soft); }
-  .day.on .mark { color: var(--on); }
+  .day.on .mark { color: var(--on-text); }
   /* 칸 전체가 하루(24시간): 방송 시간(--fill)만큼 아래부터 진한 초록으로 채운다 */
   .day.on.filled { background: linear-gradient(to top, var(--on-fill) var(--fill), var(--on-soft) var(--fill)); }
   .day.off { background: var(--off-soft); }
-  .day.off .mark { color: var(--off); }
+  .day.off .mark { color: var(--off-text); }
   .day.pending { outline: 2px dashed var(--pending); outline-offset: -2px; background: transparent; }
   .day.unknown {
     background: repeating-linear-gradient(135deg, var(--none) 0 6px, transparent 6px 12px);
@@ -150,14 +160,14 @@
   }
   .tip {
     position: absolute; z-index: 10; width: max-content; max-width: 280px; pointer-events: none;
-    padding: 10px 12px; border-radius: 10px; font-size: 13px;
+    padding: 10px 12px; border-radius: 10px; font-size: 13px; overflow-wrap: anywhere;
     background: var(--surface); border: 1px solid var(--line); box-shadow: 0 6px 20px rgba(0, 0, 0, .15);
   }
   .tip ul, .info ul { margin: 6px 0 0; padding-left: 18px; }
   .tip li + li, .info li + li { margin-top: 6px; }
   .tip .muted { color: var(--muted); }
 
-  .info { margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--line); font-size: 14px; min-height: 24px; }
+  .info { margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--line); font-size: 14px; min-height: 24px; overflow-wrap: anywhere; }
   .info .muted { color: var(--muted); }
   footer { margin-top: 24px; color: var(--muted); font-size: 13px; }
 </style>
@@ -194,7 +204,7 @@
       <span><i style="background:repeating-linear-gradient(135deg, var(--pending) 0 2px, transparent 2px 4px)"></i>확인 전</span>
       <span><i style="background:var(--none)"></i>기록 없음</span>
     </div>
-    <div class="info" id="info"><span class="muted">날짜를 누르면 방송 정보를 볼 수 있어요.</span></div>
+    <div class="info" id="info" aria-live="polite"><span class="muted">날짜를 누르면 방송 정보를 볼 수 있어요.</span></div>
   </section>
 
   <footer id="footer"></footer>

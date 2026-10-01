@@ -58,7 +58,8 @@ export function renderToday(root, state) {
   } else if (streams.length) {
     verdict = '방송함';
     cls = 'on';
-    detail = streams.map((s) => `${hm(s.openDate)}~${s.ended ? '확인 중' : approx(s) + hm(s.closeDate)} · ${esc(s.title)}`).join('<br>');
+    // 여기 온 열린 방송은 방송 중으로 믿을 수 없으니(끝났거나 수집이 멈춤) 끝을 '확인 중'으로 둔다
+    detail = streams.map((s) => `${hm(s.openDate)}~${s.closeDate ? approx(s) + hm(s.closeDate) : '확인 중'} · ${esc(s.title)}`).join('<br>');
   } else {
     verdict = '아직 안 켬';
     cls = 'pending';
@@ -117,16 +118,16 @@ export function renderCalendar(root, state) {
 
 // 날짜 상세. 아래 정보 칸과 마우스 툴팁이 같이 쓴다
 // 방송 중 카테고리를 바꿨으면 구간별로, 아니면 카테고리 하나를 괄호로 보여 준다.
-// 마지막 구간의 끝은 방송 종료와 같게 표시하고(추정이면 '약', 모르면 '확인 중'),
+// 마지막 구간의 끝은 방송 종료와 같게 표시하고(추정이면 '약', 방송 중이면 비우고, 모르면 '확인 중'),
 // 길이가 0이거나 거꾸로인 구간(종료 직전에 바뀌었거나 다시보기로 종료 시각이 당겨짐)은 뺀다
-function categoryText(x) {
+function categoryText(x, live) {
   const segments = (x.categories ?? []).flatMap((c, i, all) => {
     // 끝은 다음 구간 시작과 방송 종료 중 이른 쪽
     const next = all[i + 1]?.from;
     const atClose = Boolean(x.closeDate) && (!next || next >= x.closeDate);
     const endAt = atClose ? x.closeDate : next;
     if (endAt && endAt <= c.from) return [];
-    const end = atClose ? approx(x) + hm(x.closeDate) : next ? hm(next) : x.ended ? '확인 중' : '';
+    const end = atClose ? approx(x) + hm(x.closeDate) : next ? hm(next) : live ? '' : '확인 중';
     return [{ text: `${hm(c.from)}~${end} ${esc(c.category ?? '카테고리 없음')}`, category: c.category }];
   });
   if (segments.length > 1) return `<div class="muted">${segments.map((g) => g.text).join('<br>')}</div>`;
@@ -137,13 +138,16 @@ function categoryText(x) {
 export function dayDetail(state, d) {
   const streams = state.byDay.get(d) || [];
   const s = dayStatus(d, ctx(state));
+  // 종료 시각이 없어도 최근에 방송 중으로 확인된 방송만 '방송 중'이고, 나머지(끝남·수집 멈춤)는 지어내지 않는다
+  const liveStream = findLiveStream(state);
   let body;
   if (streams.length) {
     body = '<ul>' + streams.map((x) => {
+      const live = x === liveStream;
       const time = x.closeDate
         ? `<b>${hm(x.openDate)} ~ ${approx(x)}${hm(x.closeDate)}</b> · ${approx(x)}${durationLong(streamMinutes(x))}`
-        : `<b>${hm(x.openDate)} ~ ${x.ended ? '종료 시각 확인 중' : '방송 중'}</b>`;
-      return `<li>${time}<br>${esc(x.title)}${categoryText(x)}</li>`;
+        : `<b>${hm(x.openDate)} ~ ${live ? '방송 중' : '종료 시각 확인 중'}</b>`;
+      return `<li>${time}<br>${esc(x.title)}${categoryText(x, live)}</li>`;
     }).join('') + '</ul>';
     const total = dayMinutes(streams);
     if (streams.length > 1 && total !== null) body += `<div class="muted">총 ${durationLong(total)}</div>`;
@@ -159,10 +163,13 @@ export function renderInfo(root, state) {
 }
 
 export function select(root, state, d) {
+  // 달력을 다시 그리면 누른 버튼이 사라져 포커스가 맨 위로 가므로, 키보드 등으로 그 칸에 있던 포커스는 새 칸으로 되돌린다
+  const refocus = root.activeElement?.closest?.('#grid button.day');
   state.selected = d;
   hideTip(root);
   renderInfo(root, state);
   renderCalendar(root, state);
+  if (refocus) root.querySelector(`#grid button.day[data-d="${refocus.dataset.d}"]`)?.focus({ preventScroll: true });
   // 폰에선 상세 칸이 화면 아래에 있을 수 있어 보이도록 끌어온다
   root.getElementById('info').scrollIntoView?.({ block: 'nearest', behavior: 'smooth' });
 }
@@ -197,9 +204,12 @@ export function bindHover(root, state) {
 }
 
 export function shiftMonth(root, state, n) {
+  const pressed = root.activeElement;
   state.view = addMonths(state.view, n);
   renderStats(root, state);
   renderCalendar(root, state);
+  // 끝 달에 닿아 누른 버튼이 비활성화되면 포커스가 사라지므로 반대쪽 버튼으로 옮긴다
+  if (pressed?.disabled && (pressed.id === 'prev' || pressed.id === 'next')) root.getElementById(pressed.id === 'prev' ? 'next' : 'prev').focus();
 }
 
 export function renderAll(root, state) {
