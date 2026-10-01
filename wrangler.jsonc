@@ -2,7 +2,7 @@
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "restful-sam",
   "main": "worker/index.js",
-  "compatibility_date": "2026-09-01",
+  "compatibility_date": "2026-10-02",
   "account_id": "fc7323801136ae087db0b88ab4d07b53",
   "workers_dev": true,
   // 정적 페이지. 업로드할 파일은 .assetsignore의 허용 목록으로 제한한다.
@@ -22,5 +22,10 @@
   ],
   // 1분마다 방송 상태 수집
   "triggers": { "crons": ["* * * * *"] },
-  "observability": { "enabled": true }
+  // 로그와 트레이스. 무료 한도(하루 20만 건)에 비해 사용량(하루 1만 건 남짓)이 작아 전부 남긴다
+  "observability": {
+    "enabled": true,
+    "logs": { "enabled": true, "head_sampling_rate": 1 },
+    "traces": { "enabled": true, "head_sampling_rate": 1 }
+  }
 }
