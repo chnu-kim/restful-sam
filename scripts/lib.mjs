@@ -94,6 +94,11 @@ export function applyLiveStatus(data, live, today, checkedAt = null) {
 }
 
 const MATCH_WINDOW_MS = 30 * 60 * 1000;
+// 상세의 시작 시각과 저장된 시작 시각이 이만큼 이내면 같은 방송으로 본다 (API 간 초 단위 차이 허용).
+// 끊겼다 다시 켠 방송을 구분해야 해서 위 추정 범위보다 훨씬 좁게 둔다
+const SAME_STREAM_MS = 2 * 60 * 1000;
+const closest = (times, t) =>
+  times.filter((x) => Math.abs(x - t) <= SAME_STREAM_MS).sort((a, b) => Math.abs(a - t) - Math.abs(b - t))[0];
 export const MAX_DETAIL_CALLS = 3;
 
 // live-status는 마지막 방송만 알려주므로, 놓친 방송과 끝났는데 종료 시각을 모르는 방송(ended)을 다시보기로 보충한다.
@@ -108,7 +113,7 @@ export async function backfillFromReplays(data, { fetchImpl = fetch, serviceBase
   const known = data.streams.map((s) => parseKst(s.openDate));
   const pending = data.streams.filter((s) => s.ended && !s.closeDate).map((s) => parseKst(s.openDate));
   const added = [];
-  const closed = new Map();
+  const closed = new Map(); // 저장된 시작 시각(ms) -> 채울 종료 시각
   let calls = 0;
   for (const v of list.data ?? []) {
     if (v.videoType !== 'REPLAY' || !v.publishDate || !v.duration) continue;
@@ -122,20 +127,22 @@ export async function backfillFromReplays(data, { fetchImpl = fetch, serviceBase
     if (!openDate) continue;
     const closeDate = formatKst(parseKst(openDate) + v.duration * 1000);
     const t = parseKst(openDate);
-    if (pending.includes(t)) {
-      closed.set(openDate, closeDate);
-      pending.splice(pending.indexOf(t), 1);
+    const match = closest(pending, t);
+    if (match !== undefined) {
+      closed.set(match, closeDate);
+      pending.splice(pending.indexOf(match), 1);
       continue;
     }
-    if (known.includes(t)) continue;
+    if (closest(known, t) !== undefined) continue;
     added.push({ openDate, closeDate, title: v.videoTitle ?? '', category: v.videoCategoryValue || null });
     known.push(t);
   }
   if (!added.length && !closed.size) return data;
   const streams = data.streams.map((s) => {
-    if (!closed.has(s.openDate)) return s;
+    const closeDate = closed.get(parseKst(s.openDate));
+    if (!closeDate) return s;
     const { ended, ...rest } = s;
-    return { ...rest, closeDate: closed.get(s.openDate) };
+    return { ...rest, closeDate };
   });
   return { ...data, streams: sortStreams([...streams, ...added]) };
 }

@@ -245,6 +245,11 @@ describe('backfillFromReplays', () => {
     expect(await backfillFromReplays(known, { fetchImpl: f, serviceBase: BASE })).toBe(known);
   });
 
+  it('상세의 시작 시각이 아는 방송과 몇 초 차이면 같은 방송으로 보고 추가하지 않는다', async () => {
+    const f = replayFetch([replay(2, '2026-09-25 16:30:00', 23687)], { 2: { liveOpenDate: '2026-09-25 08:49:37' } });
+    expect(await backfillFromReplays(known, { fetchImpl: f, serviceBase: BASE })).toBe(known);
+  });
+
   it('추정이 30분 넘게 어긋나도 상세의 시작 시각이 같으면 추가하지 않는다', async () => {
     const f = replayFetch([replay(2, '2026-09-25 16:30:00', 23687)], { 2: { liveOpenDate: '2026-09-25 08:49:35' } });
     const next = await backfillFromReplays(known, { fetchImpl: f, serviceBase: BASE });
@@ -269,6 +274,13 @@ describe('backfillFromReplays', () => {
         data.streams[1],
       ]);
       expect(data.streams[0].ended).toBe(true); // 원본은 그대로
+    });
+
+    it('상세의 시작 시각이 몇 초 달라도 같은 방송으로 보고 채운다 (중복 추가 없음)', async () => {
+      const f = replayFetch([replay(1, '2026-10-02 20:10:30', 600)], { 1: { liveOpenDate: '2026-10-02 20:00:01' } });
+      const next = await backfillFromReplays(data, { fetchImpl: f, serviceBase: BASE });
+      expect(next.streams).toHaveLength(2);
+      expect(next.streams[0]).toEqual({ openDate: '2026-10-02 20:00:00', closeDate: '2026-10-02 20:10:01', title: 'A', category: null });
     });
 
     it('근처의 다른 방송 다시보기면 건드리지 않는다', async () => {
