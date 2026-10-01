@@ -116,16 +116,22 @@ export function renderCalendar(root, state) {
 }
 
 // 날짜 상세. 아래 정보 칸과 마우스 툴팁이 같이 쓴다
-// 방송 중 카테고리를 바꿨으면 구간별로, 아니면 카테고리 하나를 괄호로 보여 준다
+// 방송 중 카테고리를 바꿨으면 구간별로, 아니면 카테고리 하나를 괄호로 보여 준다.
+// 마지막 구간의 끝은 방송 종료와 같게 표시하고(추정이면 '약', 모르면 '확인 중'),
+// 길이가 0이거나 거꾸로인 구간(종료 직전에 바뀌었거나 다시보기로 종료 시각이 당겨짐)은 뺀다
 function categoryText(x) {
-  if (x.categories?.length > 1) {
-    const parts = x.categories.map((c, i) => {
-      const end = x.categories[i + 1]?.from ?? x.closeDate;
-      return `${hm(c.from)}~${end ? hm(end) : ''} ${esc(c.category ?? '카테고리 없음')}`;
-    });
-    return `<div class="muted">${parts.join('<br>')}</div>`;
-  }
-  return x.category ? ` <span class="muted">(${esc(x.category)})</span>` : '';
+  const segments = (x.categories ?? []).flatMap((c, i, all) => {
+    // 끝은 다음 구간 시작과 방송 종료 중 이른 쪽
+    const next = all[i + 1]?.from;
+    const atClose = Boolean(x.closeDate) && (!next || next >= x.closeDate);
+    const endAt = atClose ? x.closeDate : next;
+    if (endAt && endAt <= c.from) return [];
+    const end = atClose ? approx(x) + hm(x.closeDate) : next ? hm(next) : x.ended ? '확인 중' : '';
+    return [{ text: `${hm(c.from)}~${end} ${esc(c.category ?? '카테고리 없음')}`, category: c.category }];
+  });
+  if (segments.length > 1) return `<div class="muted">${segments.map((g) => g.text).join('<br>')}</div>`;
+  const category = segments.length ? segments[0].category : x.category;
+  return category ? ` <span class="muted">(${esc(category)})</span>` : '';
 }
 
 export function dayDetail(state, d) {
