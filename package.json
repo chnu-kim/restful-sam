@@ -7,7 +7,7 @@
   },
   "scripts": {
     "dev": "wrangler dev",
-    "deploy": "wrangler deploy",
+    "deploy": "npm test && wrangler d1 migrations apply DB --remote && wrangler deploy",
     "test": "vitest run --coverage",
     "test:watch": "vitest",
     "test:e2e": "playwright test",
