@@ -22,6 +22,13 @@ export const hm = (dt) => (dt ? dt.slice(11, 16) : '');
 export const esc = (s) =>
   String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 
+// 지난 날 달력 칸에 보여 줄 방송 시간대: 그날 첫 시작 ~ 마지막 종료. 끝나지 않은 방송이 있으면 지어내지 않고 null
+export function dayTimeRange(streams) {
+  if (!streams?.length || streams.some((s) => !s.closeDate)) return null;
+  const close = streams.map((s) => s.closeDate).sort().at(-1);
+  return { open: hm(streams[0].openDate), close: hm(close) };
+}
+
 // 방송은 시작일 기준으로 그 날짜에 속한다
 export function groupByDay(streams) {
   const byDay = new Map();

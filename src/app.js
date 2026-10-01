@@ -1,6 +1,6 @@
 // 페이지 렌더링. 상태는 state 객체 하나로 들고, DOM은 root(document)에서 찾는다.
 import {
-  DOW, addDays, addMonths, computeStats, dayOfWeek, dayStatus, esc, firstMonth, hm, makeContext, monthDays, monthLabel, todayKst,
+  DOW, addDays, addMonths, computeStats, dayOfWeek, dayStatus, dayTimeRange, esc, firstMonth, hm, makeContext, monthDays, monthLabel, todayKst,
 } from './calendar.js';
 
 const MARKS = { on: '방송', off: '휴방', pending: '?', unknown: '미확인', nodata: '', future: '' };
@@ -90,8 +90,11 @@ export function renderCalendar(root, state) {
   for (const d of days) {
     const s = dayStatus(d, ctx(state));
     const sel = d === state.selected;
-    const label = `${Number(d.slice(5, 7))}월 ${Number(d.slice(8))}일${LABELS[s] ? ' ' + LABELS[s] : ''}`;
-    html += `<button class="day ${s}${sel ? ' selected' : ''}" data-d="${d}" aria-label="${label}" aria-pressed="${sel}"${s === 'future' ? ' disabled' : ''}><span>${Number(d.slice(8))}</span><span class="mark">${MARKS[s]}</span></button>`;
+    // 지난 방송일은 시작~종료 시각도 보여 준다 (좁은 화면에선 CSS로 숨기고 '방송'만 표시)
+    const range = s === 'on' && d < state.today ? dayTimeRange(state.byDay.get(d)) : null;
+    const label = `${Number(d.slice(5, 7))}월 ${Number(d.slice(8))}일${LABELS[s] ? ' ' + LABELS[s] : ''}${range ? ` ${range.open}~${range.close}` : ''}`;
+    const time = range ? `<span class="time" aria-hidden="true">${range.open}<br>~${range.close}</span>` : '';
+    html += `<button class="day ${s}${range ? ' timed' : ''}${sel ? ' selected' : ''}" data-d="${d}" aria-label="${label}" aria-pressed="${sel}"${s === 'future' ? ' disabled' : ''}><span>${Number(d.slice(8))}</span><span class="mark">${MARKS[s]}</span>${time}</button>`;
   }
   const grid = root.getElementById('grid');
   grid.innerHTML = html;

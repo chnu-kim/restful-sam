@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-  addDays, addMonths, computeStats, currentStreak, dayOfWeek, dayStatus, esc, firstMonth, groupByDay, hm, isFinal, makeContext, monthDays, monthLabel, todayKst,
+  addDays, addMonths, computeStats, currentStreak, dayOfWeek, dayStatus, dayTimeRange, esc, firstMonth, groupByDay, hm, isFinal, makeContext, monthDays, monthLabel, todayKst,
 } from '../../src/calendar.js';
 
 const s = (openDate, closeDate = null) => ({ openDate, closeDate, title: 't', category: null });
@@ -185,5 +185,19 @@ describe('firstMonth', () => {
   it('방송이 없거나 더 늦으면 기록 시작 달', () => {
     expect(firstMonth({ since: '2026-10-01', streams: [] })).toBe('2026-10');
     expect(firstMonth({ since: '2026-10-01', streams: [s('2026-10-05 08:00:00')] })).toBe('2026-10');
+  });
+});
+
+describe('dayTimeRange', () => {
+  it('첫 시작부터 마지막 종료까지, 자정을 넘긴 종료도 시각만 쓴다', () => {
+    expect(dayTimeRange([s('2026-09-24 07:55:37', '2026-09-24 16:17:09')])).toEqual({ open: '07:55', close: '16:17' });
+    expect(dayTimeRange([s('2026-09-24 10:00:00', '2026-09-24 12:00:00'), s('2026-09-24 20:00:00', '2026-09-25 02:10:00')]))
+      .toEqual({ open: '10:00', close: '02:10' });
+  });
+
+  it('끝나지 않은 방송이 있거나 방송이 없으면 null', () => {
+    expect(dayTimeRange([s('2026-09-24 10:00:00', '2026-09-24 12:00:00'), s('2026-09-24 20:00:00')])).toBeNull();
+    expect(dayTimeRange([])).toBeNull();
+    expect(dayTimeRange(undefined)).toBeNull();
   });
 });

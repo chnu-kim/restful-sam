@@ -80,6 +80,18 @@ test('자정을 넘겨 이어지는 방송은 오늘 카드에 방송 중으로 
   await expect(page.locator('#today .detail')).toHaveText('어제 23:00 시작 · 심야');
 });
 
+test('지난 방송일 칸의 시각은 넓은 화면에서만 보이고 좁은 화면에선 \'방송\'으로 표시', async ({ page }) => {
+  const data = { ...BASE, streams: [...BASE.streams, st('2026-10-01 07:55:00', '2026-10-01 16:17:00')] };
+  await page.setViewportSize({ width: 800, height: 900 });
+  await open(page, { data });
+  await expect(day(page, '2026-10-01').locator('.time')).toBeVisible();
+  await expect(day(page, '2026-10-01').locator('.time')).toHaveText('07:55~16:17');
+  await expect(day(page, '2026-10-01').locator('.mark')).toBeHidden();
+  await page.setViewportSize({ width: 375, height: 800 });
+  await expect(day(page, '2026-10-01').locator('.time')).toBeHidden();
+  await expect(day(page, '2026-10-01').locator('.mark')).toHaveText('방송');
+});
+
 test('수집이 멈추면 지연 안내와 미확인 표시', async ({ page }) => {
   await open(page, { now: '2026-10-06 12:00:00' });
   await expect(page.locator('#today .stale')).toContainText('마지막 자동 확인이 2026-10-02');
