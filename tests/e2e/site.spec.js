@@ -10,7 +10,7 @@ const st = (openDate, closeDate, title = '방송', category = null) => ({ openDa
 const BASE = {
   channelId: 'x',
   since: '2026-10-01',
-  lastCheckedDate: '2026-10-02',
+  checkedDays: ['2026-10-02'],
   live: false,
   streams: [st('2026-09-25 08:49:35', '2026-09-25 15:24:35', '포더킹2', '포 더 킹 2')],
 };
@@ -59,10 +59,45 @@ test('방송 중이면 라이브 표시', async ({ page }) => {
   await expect(day(page, '2026-10-02')).toHaveClass(/\bon\b/);
 });
 
-test('KST 자정 직후에는 날짜가 바뀐다 (UTC 15:00)', async ({ page }) => {
+test('KST 자정 직후 첫 수집 전에는 어제를 휴방으로 단정하지 않는다', async ({ page }) => {
   await open(page, { now: '2026-10-03 00:00:30' });
   await expect(page.locator('#today .label')).toHaveText('오늘 (2026-10-03)');
+  await expect(day(page, '2026-10-02')).toHaveClass(/\bunknown\b/);
+  await expect(page.locator('#today .detail')).toHaveText('어제 방송 여부는 아직 확인 중이에요.');
+});
+
+test('자정 이후 첫 수집이 끝나면 어제가 휴방으로 확정된다', async ({ page }) => {
+  await open(page, { data: { ...BASE, checkedDays: ['2026-10-02', '2026-10-03'] }, now: '2026-10-03 00:30:00' });
   await expect(day(page, '2026-10-02')).toHaveClass(/\boff\b/);
+  await expect(page.locator('#today .detail')).toHaveText('어제는 휴방이었어요.');
+});
+
+test('자정을 넘겨 이어지는 방송은 오늘 카드에 방송 중으로 보인다', async ({ page }) => {
+  const data = { ...BASE, live: true, checkedDays: ['2026-10-02', '2026-10-03'], streams: [...BASE.streams, st('2026-10-02 23:00:00', null, '심야')] };
+  await open(page, { data, now: '2026-10-03 01:00:00' });
+  await expect(page.locator('#today .verdict')).toHaveText('방송 중');
+  await expect(page.locator('#today .detail')).toHaveText('어제 23:00 시작 · 심야');
+});
+
+test('수집이 멈추면 지연 안내와 미확인 표시', async ({ page }) => {
+  await open(page, { now: '2026-10-06 12:00:00' });
+  await expect(page.locator('#today .stale')).toContainText('마지막 자동 확인이 2026-10-02');
+  await expect(day(page, '2026-10-04')).toHaveClass(/\bunknown\b/);
+  await expect(day(page, '2026-10-04')).toHaveAttribute('aria-label', '10월 4일 확인 전');
+});
+
+test('데이터를 불러오는 동안 월 이동 버튼은 비활성이다', async ({ page }) => {
+  await page.clock.setFixedTime(KST('2026-10-02 12:00:00'));
+  let release;
+  const gate = new Promise((r) => (release = r));
+  await page.route('**/data/streams.json', async (route) => {
+    await gate;
+    await route.fulfill({ contentType: 'application/json', body: JSON.stringify(BASE) });
+  });
+  await page.goto('/');
+  await expect(page.locator('#prev')).toBeDisabled();
+  release();
+  await expect(page.locator('#prev')).toBeEnabled();
 });
 
 test('날짜를 누르면 상세가 나오고, 선택이 바뀐다', async ({ page }) => {

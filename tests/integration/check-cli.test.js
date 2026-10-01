@@ -9,28 +9,33 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from
 
 const SCRIPT = fileURLToPath(new URL('../../scripts/check.mjs', import.meta.url));
 
-let server, baseUrl, reply, dir, dataPath;
+let server, baseUrl, serviceBase, reply, replayReply, dir, dataPath;
+
+// 다시보기 목록이 비어 있는 기본 응답
+const NO_REPLAYS = () => ({ body: { code: 200, content: { data: [] } } });
 
 beforeAll(async () => {
   server = createServer((req, res) => {
-    const { status = 200, body } = reply(req);
+    const { status = 200, body } = req.url.startsWith('/service/') ? replayReply(req) : reply(req);
     res.writeHead(status, { 'Content-Type': 'application/json' });
     res.end(typeof body === 'string' ? body : JSON.stringify(body));
   });
   await new Promise((r) => server.listen(0, '127.0.0.1', r));
   baseUrl = `http://127.0.0.1:${server.address().port}/live-status`;
+  serviceBase = `http://127.0.0.1:${server.address().port}/service`;
 });
 afterAll(() => new Promise((r) => server.close(r)));
 
 beforeEach(async () => {
   dir = await mkdtemp(join(tmpdir(), 'sam-cli-'));
   dataPath = join(dir, 'streams.json');
+  replayReply = NO_REPLAYS;
 });
 afterEach(() => rm(dir, { recursive: true, force: true }));
 
 const runCli = (env = {}) =>
   new Promise((resolve) => {
-    execFile(process.execPath, [SCRIPT], { env: { ...process.env, CHZZK_API_URL: baseUrl, DATA_PATH: dataPath, ...env } }, (err, stdout, stderr) =>
+    execFile(process.execPath, [SCRIPT], { env: { ...process.env, CHZZK_API_URL: baseUrl, CHZZK_SERVICE_BASE: serviceBase, DATA_PATH: dataPath, ...env } }, (err, stdout, stderr) =>
       resolve({ code: err ? err.code : 0, stdout, stderr }),
     );
   });
@@ -46,6 +51,7 @@ describe('check.mjs CLI', () => {
     };
     const r = await runCli();
     expect(r).toMatchObject({ code: 0, stderr: '' });
+    expect(JSON.parse(await readFile(dataPath, 'utf8')).checkedDays).toHaveLength(1);
     expect(r.stdout).toContain('갱신됨: status=CLOSE');
     expect(ua).toContain('Mozilla');
     const data = JSON.parse(await readFile(dataPath, 'utf8'));
@@ -56,7 +62,7 @@ describe('check.mjs CLI', () => {
   });
 
   it('기존 since(10/1 휴방 반영)를 보존한다', async () => {
-    await writeFile(dataPath, JSON.stringify({ channelId: 'x', since: '2026-10-01', lastCheckedDate: null, live: false, streams: [] }));
+    await writeFile(dataPath, JSON.stringify({ channelId: 'x', since: '2026-10-01', checkedDays: [], live: false, streams: [] }));
     reply = () => ({ body: { code: 200, content } });
     expect((await runCli()).code).toBe(0);
     expect(JSON.parse(await readFile(dataPath, 'utf8')).since).toBe('2026-10-01');
@@ -73,6 +79,26 @@ describe('check.mjs CLI', () => {
     expect(res.code).toBe(1);
     expect(res.stderr).toContain(msg);
     expect(await readFile(dataPath, 'utf8')).toBe('untouched');
+  });
+
+  it('다시보기로 놓친 방송을 보충한다', async () => {
+    reply = () => ({ body: { code: 200, content } });
+    replayReply = (req) =>
+      req.url.includes('/videos?')
+        ? { body: { code: 200, content: { data: [{ videoNo: 1, videoType: 'REPLAY', publishDate: '2026-09-24 16:23:02', duration: 30092, videoTitle: '엘밤통' }] } } }
+        : { body: { code: 200, content: { liveOpenDate: '2026-09-24 07:55:37' } } };
+    expect((await runCli()).code).toBe(0);
+    const data = JSON.parse(await readFile(dataPath, 'utf8'));
+    expect(data.streams.map((s) => s.openDate)).toEqual(['2026-09-24 07:55:37', content.openDate]);
+  });
+
+  it('다시보기 API가 실패해도 exit 0이고 경고만 남긴다', async () => {
+    reply = () => ({ body: { code: 200, content } });
+    replayReply = () => ({ status: 500, body: 'oops' });
+    const res = await runCli();
+    expect(res.code).toBe(0);
+    expect(res.stderr).toContain('다시보기 보충 실패: videos HTTP 500');
+    expect(JSON.parse(await readFile(dataPath, 'utf8')).streams).toHaveLength(1);
   });
 
   it('서버에 연결할 수 없으면 exit 1', async () => {

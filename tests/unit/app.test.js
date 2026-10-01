@@ -13,7 +13,7 @@ const st = (openDate, closeDate, title = '방송', category = null) => ({ openDa
 const DATA = {
   channelId: 'x',
   since: '2026-10-01',
-  lastCheckedDate: '2026-10-02',
+  checkedDays: ['2026-10-02'],
   live: false,
   streams: [st('2026-09-25 08:49:35', '2026-09-25 15:24:35', '포더킹2', '포 더 킹 2')],
 };
@@ -77,6 +77,67 @@ describe('오늘 카드', () => {
     mount(data, KST('2026-10-02 21:00:00'));
     expect($('#today img')).toBeNull();
     expect($('#today .detail').textContent).toContain('<img src=x');
+  });
+});
+
+describe('오늘 카드: 자정을 넘긴 방송·수집 지연', () => {
+  const overnight = { ...DATA, live: true, streams: [...DATA.streams, st('2026-10-02 23:00:00', null, '심야')] };
+
+  it('어제 시작해 자정을 넘긴 방송도 방송 중으로 보인다 (오늘 첫 수집 후)', () => {
+    mount({ ...overnight, checkedDays: ['2026-10-02', '2026-10-03'] }, KST('2026-10-03 01:00:00'));
+    expect($('#today .verdict').textContent).toBe('방송 중');
+    expect($('#today .detail').textContent).toBe('어제 23:00 시작 · 심야');
+    expect($('#today .stale')).toBeNull();
+    expect(day('2026-10-02').className).toContain('on'); // 달력은 시작일 기준 그대로
+  });
+
+  it('자정 직후 첫 수집 전에도 어제 확인된 데이터라면 방송 중으로 믿는다', () => {
+    mount(overnight, KST('2026-10-03 00:03:00'));
+    expect($('#today .verdict').textContent).toBe('방송 중');
+  });
+
+  it('이틀 이상 이어진 방송은 날짜를 함께 보여준다', () => {
+    mount({ ...overnight, checkedDays: ['2026-10-02', '2026-10-03', '2026-10-04'] }, KST('2026-10-04 10:00:00'));
+    expect($('#today .detail').textContent).toBe('10/2 23:00 시작 · 심야');
+  });
+
+  it('수집이 멈춰 live가 남아 있으면 방송 중으로 믿지 않고 지연 안내를 보여준다', () => {
+    mount(overnight, KST('2026-10-05 12:00:00'));
+    expect($('#today .verdict').textContent).toBe('아직 안 켬');
+    expect($('#today .stale').textContent).toBe('마지막 자동 확인이 2026-10-02이라 최신 정보가 아닐 수 있어요.');
+    expect($('#today .detail').textContent).toBe('어제 방송 여부는 아직 확인 중이에요.');
+    expect(day('2026-10-03').className).toBe('day unknown');
+    expect(day('2026-10-03').textContent).toBe('3미확인');
+  });
+
+  it('자동 확인 기록이 아예 없으면 그렇게 안내한다', () => {
+    mount({ ...DATA, live: true, checkedDays: [], streams: [st('2026-10-02 20:00:00', null)] }, KST('2026-10-02 21:00:00'));
+    expect($('#today .verdict').textContent).toBe('방송함');
+    expect($('#today .stale').textContent).toBe('자동 확인 기록이 없어 최신 정보가 아닐 수 있어요.');
+  });
+
+  it('미확인 날짜 상세', () => {
+    const state = mount(DATA, KST('2026-10-04 12:00:00'));
+    select(document, state, '2026-10-03');
+    expect($('#info').textContent).toBe('2026-10-03 (토)아직 확인되지 않았어요. 다음 자동 확인 후 반영돼요.');
+  });
+});
+
+describe('접근성', () => {
+  it('날짜 버튼에 날짜와 상태를 읽어 주는 aria-label, 선택 상태 aria-pressed', () => {
+    const state = mount(DATA, KST('2026-10-03 12:00:00'));
+    expect(day('2026-10-01').getAttribute('aria-label')).toBe('10월 1일 휴방');
+    expect(day('2026-10-02').getAttribute('aria-label')).toBe('10월 2일 확인 전');
+    expect(day('2026-10-03').getAttribute('aria-label')).toBe('10월 3일 아직 방송 전');
+    expect(day('2026-10-04').getAttribute('aria-label')).toBe('10월 4일');
+    expect(day('2026-10-01').getAttribute('aria-pressed')).toBe('false');
+    select(document, state, '2026-10-01');
+    expect(day('2026-10-01').getAttribute('aria-pressed')).toBe('true');
+  });
+
+  it('데이터를 불러오기 전에는 월 이동 버튼이 비활성이다', () => {
+    expect($('#prev').disabled).toBe(true);
+    expect($('#next').disabled).toBe(true);
   });
 });
 
@@ -174,7 +235,7 @@ describe('푸터와 오류', () => {
   });
 
   it('마지막 확인일이 없으면 -', () => {
-    mount({ ...DATA, lastCheckedDate: null }, KST('2026-10-02 12:00:00'));
+    mount({ ...DATA, checkedDays: [] }, KST('2026-10-02 12:00:00'));
     expect($('#footer').textContent).toContain('마지막 확인일 -');
   });
 

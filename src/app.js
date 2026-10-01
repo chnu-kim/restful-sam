@@ -1,26 +1,48 @@
 // 페이지 렌더링. 상태는 state 객체 하나로 들고, DOM은 root(document)에서 찾는다.
 import {
-  DOW, addDays, addMonths, computeStats, dayOfWeek, dayStatus, esc, firstMonth, groupByDay, hm, monthDays, monthLabel, todayKst,
+  DOW, addDays, addMonths, computeStats, dayOfWeek, dayStatus, esc, firstMonth, hm, makeContext, monthDays, monthLabel, todayKst,
 } from './calendar.js';
 
-const MARKS = { on: '방송', off: '휴방', pending: '?', nodata: '', future: '' };
+const MARKS = { on: '방송', off: '휴방', pending: '?', unknown: '미확인', nodata: '', future: '' };
+const LABELS = { on: '방송', off: '휴방', pending: '아직 방송 전', unknown: '확인 전', nodata: '기록 없음', future: '' };
 
 export function createState(data, now = Date.now()) {
   const today = todayKst(now);
-  return { data, today, byDay: groupByDay(data.streams), view: today.slice(0, 7), selected: null };
+  const ctx = makeContext(data, today);
+  return { data, today, ctx, byDay: ctx.byDay, lastChecked: data.checkedDays?.at(-1) ?? null, view: today.slice(0, 7), selected: null };
 }
 
-const ctx = (state) => ({ byDay: state.byDay, since: state.data.since, today: state.today });
+const ctx = (state) => state.ctx;
+
+// 자정을 넘긴 방송은 시작일(어제)에 속하므로 오늘 목록이 아니라 전체에서 열린 방송을 찾는다.
+// 수집이 멈춰 live가 남아 있을 수 있으니 어제 이후에 확인된 데이터일 때만 믿는다
+function findLiveStream(state) {
+  if (!state.data.live || !state.lastChecked || state.lastChecked < addDays(state.today, -1)) return null;
+  return state.data.streams.findLast((s) => !s.closeDate) ?? null;
+}
+
+function startedAt(openDate, today) {
+  const d = openDate.slice(0, 10);
+  if (d === today) return hm(openDate);
+  if (d === addDays(today, -1)) return `어제 ${hm(openDate)}`;
+  return `${Number(d.slice(5, 7))}/${Number(d.slice(8))} ${hm(openDate)}`;
+}
+
+function staleNotice(state) {
+  if (state.lastChecked && state.lastChecked >= addDays(state.today, -1)) return '';
+  const when = state.lastChecked ? `마지막 자동 확인이 ${state.lastChecked}이라` : '자동 확인 기록이 없어';
+  return `<div class="stale">${when} 최신 정보가 아닐 수 있어요.</div>`;
+}
 
 export function renderToday(root, state) {
   const { today } = state;
   const streams = state.byDay.get(today) || [];
-  const liveStream = state.data.live ? streams.find((s) => !s.closeDate) : null;
+  const liveStream = findLiveStream(state);
   let verdict, cls, detail;
   if (liveStream) {
     verdict = '<span class="live-dot"></span>방송 중';
     cls = 'on';
-    detail = `${hm(liveStream.openDate)} 시작 · ${esc(liveStream.title)}`;
+    detail = `${startedAt(liveStream.openDate, today)} 시작 · ${esc(liveStream.title)}`;
   } else if (streams.length) {
     verdict = '방송함';
     cls = 'on';
@@ -29,10 +51,14 @@ export function renderToday(root, state) {
     verdict = '아직 안 켬';
     cls = 'pending';
     const y = dayStatus(addDays(today, -1), ctx(state));
-    detail = y === 'off' ? '어제는 휴방이었어요.' : y === 'on' ? '어제는 방송했어요.' : '';
+    detail = {
+      off: '어제는 휴방이었어요.',
+      on: '어제는 방송했어요.',
+      unknown: '어제 방송 여부는 아직 확인 중이에요.',
+    }[y] ?? '';
   }
   root.getElementById('today').innerHTML =
-    `<div class="label">오늘 (${today})</div><div class="verdict ${cls}">${verdict}</div><div class="detail">${detail}</div>`;
+    `<div class="label">오늘 (${today})</div><div class="verdict ${cls}">${verdict}</div><div class="detail">${detail}</div>${staleNotice(state)}`;
 }
 
 export function renderStats(root, state) {
@@ -55,8 +81,9 @@ export function renderCalendar(root, state) {
   html += '<div class="day blank"></div>'.repeat(dayOfWeek(days[0]));
   for (const d of days) {
     const s = dayStatus(d, ctx(state));
-    const sel = d === state.selected ? ' selected' : '';
-    html += `<button class="day ${s}${sel}" data-d="${d}"${s === 'future' ? ' disabled' : ''}><span>${Number(d.slice(8))}</span><span class="mark">${MARKS[s]}</span></button>`;
+    const sel = d === state.selected;
+    const label = `${Number(d.slice(5, 7))}월 ${Number(d.slice(8))}일${LABELS[s] ? ' ' + LABELS[s] : ''}`;
+    html += `<button class="day ${s}${sel ? ' selected' : ''}" data-d="${d}" aria-label="${label}" aria-pressed="${sel}"${s === 'future' ? ' disabled' : ''}><span>${Number(d.slice(8))}</span><span class="mark">${MARKS[s]}</span></button>`;
   }
   const grid = root.getElementById('grid');
   grid.innerHTML = html;
@@ -77,6 +104,7 @@ export function renderInfo(root, state) {
     ).join('') + '</ul>';
   } else if (s === 'off') body = '<div class="muted">휴방</div>';
   else if (s === 'pending') body = '<div class="muted">아직 방송 기록이 없어요.</div>';
+  else if (s === 'unknown') body = '<div class="muted">아직 확인되지 않았어요. 다음 자동 확인 후 반영돼요.</div>';
   else body = '<div class="muted">기록을 시작하기 전이라 알 수 없어요.</div>';
   root.getElementById('info').innerHTML = `<b>${d} (${DOW[dayOfWeek(d)]})</b>${body}`;
 }
@@ -98,7 +126,7 @@ export function renderAll(root, state) {
   renderStats(root, state);
   renderCalendar(root, state);
   root.getElementById('footer').textContent =
-    `${state.data.since}부터 기록 · 매시간 자동 확인 · 마지막 확인일 ${state.data.lastCheckedDate ?? '-'}`;
+    `${state.data.since}부터 기록 · 매시간 자동 확인 · 마지막 확인일 ${state.lastChecked ?? '-'}`;
 }
 
 export function renderError(root) {
