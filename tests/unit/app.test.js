@@ -2,10 +2,10 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { bindHover, bindTheme, createState, init, renderAll, renderError, select, shiftMonth } from '../../src/app.js';
+import { bindHover, bindTheme, createState, init, renderAll, renderError, select, shiftMonth } from '../../public/src/app.js';
 
 // 실제 index.html의 마크업을 그대로 써서 id가 어긋나면 테스트가 깨지게 한다
-const MAIN = readFileSync(join(import.meta.dirname, '../../index.html'), 'utf8').match(/<main>[\s\S]*<\/main>/)[0];
+const MAIN = readFileSync(join(import.meta.dirname, '../../public/index.html'), 'utf8').match(/<main>[\s\S]*<\/main>/)[0];
 
 const KST = (s) => Date.parse(s.replace(' ', 'T') + '+09:00');
 const at = (s) => new Date(KST(s)).toISOString(); // liveCheckedAt

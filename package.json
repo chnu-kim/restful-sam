@@ -6,7 +6,8 @@
     "node": ">=22"
   },
   "scripts": {
-    "dev": "wrangler dev",
+    "dev": "wrangler dev --test-scheduled",
+    "seed:sql": "node scripts/seed-sql.mjs",
     "deploy": "npm test && wrangler d1 migrations apply DB --remote && wrangler deploy",
     "test": "vitest run --coverage",
     "test:watch": "vitest",

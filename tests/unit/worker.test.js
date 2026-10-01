@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
-import worker, { BACKFILL_EVERY_MIN, collect, loadDoc, saveDoc } from '../../worker/index.js';
+import worker from '../../worker/index.js';
+import { BACKFILL_EVERY_MIN, collect, loadDoc, saveDoc } from '../../worker/run.js';
 import { emptyData } from '../../worker/collect.js';
 
 // D1 스텁: docs 테이블 하나를 Map으로 흉내 낸다. UPDATE는 WHERE value = ? 조건까지 지킨다
