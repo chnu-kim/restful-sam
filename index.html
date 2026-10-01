@@ -1,0 +1,275 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>삼덕이 휴방 체크</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+KR:wght@400;600;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #f6f5f1;
+    --surface: #ffffff;
+    --text: #1d1d1b;
+    --muted: #77756e;
+    --line: #e3e1d9;
+    --on: #00b36b;
+    --on-soft: #d6f5e6;
+    --off: #e5484d;
+    --off-soft: #fde2e2;
+    --pending: #b8b4a8;
+    --none: #eeece6;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #141413;
+      --surface: #1e1e1c;
+      --text: #ecebe6;
+      --muted: #9a988f;
+      --line: #2f2e2b;
+      --on: #1fd286;
+      --on-soft: #143a29;
+      --off: #ff6b6f;
+      --off-soft: #3d1c1d;
+      --pending: #6b685f;
+      --none: #262523;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'IBM Plex Sans KR', system-ui, sans-serif;
+    line-height: 1.5;
+  }
+  main { max-width: 760px; margin: 0 auto; padding: 40px 16px 64px; }
+  header h1 { font-size: 28px; margin: 0 0 4px; letter-spacing: -0.02em; }
+  header a { color: var(--muted); font-size: 14px; }
+
+  .today {
+    margin: 28px 0;
+    padding: 24px;
+    border-radius: 16px;
+    background: var(--surface);
+    border: 1px solid var(--line);
+  }
+  .today .label { color: var(--muted); font-size: 14px; }
+  .today .verdict { font-size: 40px; font-weight: 700; letter-spacing: -0.03em; margin: 4px 0; }
+  .today .detail { color: var(--muted); font-size: 14px; }
+  .verdict.on { color: var(--on); }
+  .verdict.off { color: var(--off); }
+  .verdict.pending { color: var(--muted); }
+  .live-dot {
+    display: inline-block; width: 12px; height: 12px; border-radius: 50%;
+    background: var(--off); margin-right: 8px; vertical-align: middle;
+    animation: pulse 1.4s ease-in-out infinite;
+  }
+  @keyframes pulse { 50% { opacity: .3; } }
+
+  .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 28px; }
+  .stat { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 14px; }
+  .stat b { display: block; font-size: 22px; }
+  .stat span { color: var(--muted); font-size: 13px; }
+  @media (max-width: 560px) { .stats { grid-template-columns: repeat(2, 1fr); } }
+
+  .cal { background: var(--surface); border: 1px solid var(--line); border-radius: 16px; padding: 20px; }
+  .cal-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; }
+  .cal-head h2 { margin: 0; font-size: 18px; }
+  .cal-head button {
+    background: none; border: 1px solid var(--line); color: var(--text);
+    border-radius: 8px; width: 36px; height: 36px; font-size: 16px; cursor: pointer;
+  }
+  .cal-head button:disabled { opacity: .3; cursor: default; }
+  .grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; }
+  .dow { text-align: center; font-size: 12px; color: var(--muted); padding-bottom: 4px; }
+  .day {
+    aspect-ratio: 1; border-radius: 10px; border: none; padding: 6px;
+    display: flex; flex-direction: column; justify-content: space-between;
+    font: inherit; font-size: 13px; text-align: left; color: var(--text);
+    background: var(--none); cursor: pointer;
+  }
+  .day .mark { font-size: 11px; font-weight: 600; }
+  .day.on { background: var(--on-soft); }
+  .day.on .mark { color: var(--on); }
+  .day.off { background: var(--off-soft); }
+  .day.off .mark { color: var(--off); }
+  .day.pending { outline: 2px dashed var(--pending); outline-offset: -2px; background: transparent; }
+  .day.future, .day.blank { background: transparent; color: var(--muted); cursor: default; }
+  .day.nodata { color: var(--muted); }
+  .day.selected { outline: 2px solid var(--text); outline-offset: -2px; }
+
+  .legend { display: flex; flex-wrap: wrap; gap: 14px; margin-top: 14px; font-size: 13px; color: var(--muted); }
+  .legend i { display: inline-block; width: 12px; height: 12px; border-radius: 4px; margin-right: 6px; vertical-align: -1px; }
+
+  .info { margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--line); font-size: 14px; min-height: 24px; }
+  .info ul { margin: 6px 0 0; padding-left: 18px; }
+  .info .muted { color: var(--muted); }
+  footer { margin-top: 24px; color: var(--muted); font-size: 13px; }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>삼덕이 오늘 방송함?</h1>
+    <a href="https://chzzk.naver.com/86d3d8d5997609df783949d107fbde24" target="_blank" rel="noopener">치지직 채널 →</a>
+  </header>
+
+  <section class="today" id="today"><div class="label">불러오는 중…</div></section>
+  <section class="stats" id="stats"></section>
+
+  <section class="cal">
+    <div class="cal-head">
+      <button id="prev" aria-label="이전 달">‹</button>
+      <h2 id="month"></h2>
+      <button id="next" aria-label="다음 달">›</button>
+    </div>
+    <div class="grid" id="grid"></div>
+    <div class="legend">
+      <span><i style="background:var(--on-soft)"></i>방송</span>
+      <span><i style="background:var(--off-soft)"></i>휴방</span>
+      <span><i style="outline:2px dashed var(--pending);outline-offset:-2px"></i>오늘 (아직 모름)</span>
+      <span><i style="background:var(--none)"></i>기록 없음</span>
+    </div>
+    <div class="info" id="info"><span class="muted">날짜를 누르면 방송 정보를 볼 수 있어요.</span></div>
+  </section>
+
+  <footer id="footer"></footer>
+</main>
+<script>
+const DOW = ['일', '월', '화', '수', '목', '금', '토'];
+const todayKst = new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10);
+const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
+const hm = (dt) => (dt ? dt.slice(11, 16) : '');
+const addDays = (d, n) => {
+  const t = new Date(d + 'T00:00:00Z');
+  t.setUTCDate(t.getUTCDate() + n);
+  return t.toISOString().slice(0, 10);
+};
+
+let data, byDay, view, selected;
+
+function status(d) {
+  if (byDay.has(d)) return 'on';
+  if (d > todayKst) return 'future';
+  if (d < data.since) return 'nodata';
+  if (d === todayKst) return 'pending';
+  return 'off';
+}
+
+function renderToday() {
+  const el = document.getElementById('today');
+  const streams = byDay.get(todayKst) || [];
+  const live = data.live && streams.some((s) => !s.closeDate);
+  let verdict, cls, detail;
+  if (live) {
+    verdict = '<span class="live-dot"></span>방송 중'; cls = 'on';
+    const s = streams.find((s) => !s.closeDate);
+    detail = `${hm(s.openDate)} 시작 · ${esc(s.title)}`;
+  } else if (streams.length) {
+    verdict = '방송함'; cls = 'on';
+    detail = streams.map((s) => `${hm(s.openDate)}~${hm(s.closeDate)} · ${esc(s.title)}`).join('<br>');
+  } else {
+    verdict = '아직 안 켬'; cls = 'pending';
+    const yest = status(addDays(todayKst, -1));
+    detail = yest === 'off' ? '어제는 휴방이었어요.' : yest === 'on' ? '어제는 방송했어요.' : '';
+  }
+  el.innerHTML = `<div class="label">오늘 (${todayKst})</div><div class="verdict ${cls}">${verdict}</div><div class="detail">${detail}</div>`;
+}
+
+function renderStats() {
+  let on = 0, off = 0;
+  for (let d = data.since; d <= todayKst; d = addDays(d, 1)) {
+    const s = status(d);
+    if (s === 'on') on++;
+    else if (s === 'off') off++;
+  }
+  // 오늘 미정이면 어제부터 거슬러 올라가며 연속 일수를 센다
+  let d = status(todayKst) === 'pending' ? addDays(todayKst, -1) : todayKst;
+  const kind = status(d);
+  let streak = 0;
+  while (status(d) === kind && (kind === 'on' || kind === 'off')) { streak++; d = addDays(d, -1); }
+  const rate = on + off ? Math.round((on / (on + off)) * 100) : 0;
+  const streakLabel = kind === 'off' ? '연속 휴방' : '연속 방송';
+  document.getElementById('stats').innerHTML = [
+    [on + '일', '방송한 날'],
+    [off + '일', '휴방한 날'],
+    [rate + '%', '방송률'],
+    [streak + '일', streakLabel],
+  ].map(([v, l]) => `<div class="stat"><b>${v}</b><span>${l}</span></div>`).join('');
+}
+
+function renderCalendar() {
+  const [y, m] = view.split('-').map(Number);
+  document.getElementById('month').textContent = `${y}년 ${m}월`;
+  const first = `${view}-01`;
+  const startDow = new Date(first + 'T00:00:00Z').getUTCDay();
+  const days = new Date(Date.UTC(y, m, 0)).getUTCDate();
+  let html = DOW.map((d) => `<div class="dow">${d}</div>`).join('');
+  html += '<div class="day blank"></div>'.repeat(startDow);
+  const marks = { on: '방송', off: '휴방', pending: '?', nodata: '', future: '' };
+  for (let i = 1; i <= days; i++) {
+    const d = `${view}-${String(i).padStart(2, '0')}`;
+    const s = status(d);
+    const sel = d === selected ? ' selected' : '';
+    html += `<button class="day ${s}${sel}" data-d="${d}" ${s === 'future' ? 'disabled' : ''}><span>${i}</span><span class="mark">${marks[s]}</span></button>`;
+  }
+  const grid = document.getElementById('grid');
+  grid.innerHTML = html;
+  grid.querySelectorAll('button.day').forEach((b) => b.addEventListener('click', () => select(b.dataset.d)));
+
+  const firstStream = data.streams[0]?.openDate ?? data.since;
+  const firstMonth = (firstStream < data.since ? firstStream : data.since).slice(0, 7);
+  document.getElementById('prev').disabled = view <= firstMonth;
+  document.getElementById('next').disabled = view >= todayKst.slice(0, 7);
+}
+
+function select(d) {
+  selected = d;
+  const streams = byDay.get(d) || [];
+  const s = status(d);
+  let body;
+  if (streams.length) {
+    body = '<ul>' + streams.map((x) =>
+      `<li>${hm(x.openDate)}~${x.closeDate ? hm(x.closeDate) : '방송 중'} · ${esc(x.title)}${x.category ? ` <span class="muted">(${esc(x.category)})</span>` : ''}</li>`
+    ).join('') + '</ul>';
+  } else if (s === 'off') body = '<div class="muted">휴방</div>';
+  else if (s === 'pending') body = '<div class="muted">아직 방송 기록이 없어요.</div>';
+  else body = '<div class="muted">기록을 시작하기 전이라 알 수 없어요.</div>';
+  document.getElementById('info').innerHTML = `<b>${d} (${DOW[new Date(d + 'T00:00:00Z').getUTCDay()]})</b>${body}`;
+  renderCalendar();
+}
+
+function shiftMonth(n) {
+  const [y, m] = view.split('-').map(Number);
+  const t = new Date(Date.UTC(y, m - 1 + n, 1));
+  view = t.toISOString().slice(0, 7);
+  renderCalendar();
+}
+
+document.getElementById('prev').addEventListener('click', () => shiftMonth(-1));
+document.getElementById('next').addEventListener('click', () => shiftMonth(1));
+
+fetch('data/streams.json', { cache: 'no-store' })
+  .then((r) => r.json())
+  .then((json) => {
+    data = json;
+    byDay = new Map();
+    for (const s of data.streams) {
+      const d = s.openDate.slice(0, 10); // 시작일 기준
+      if (!byDay.has(d)) byDay.set(d, []);
+      byDay.get(d).push(s);
+    }
+    view = todayKst.slice(0, 7);
+    renderToday();
+    renderStats();
+    renderCalendar();
+    document.getElementById('footer').textContent =
+      `${data.since}부터 기록 · 매시간 자동 확인 · 마지막 확인일 ${data.lastCheckedDate ?? '-'}`;
+  })
+  .catch(() => {
+    document.getElementById('today').innerHTML = '<div class="label">데이터를 불러오지 못했어요.</div>';
+  });
+</script>
+</body>
+</html>
