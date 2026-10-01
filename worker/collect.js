@@ -18,8 +18,11 @@ export function todayKst(now = Date.now()) {
 export const parseKst = (s) => Date.parse(s.replace(' ', 'T') + '+09:00');
 export const formatKst = (ms) => new Date(ms + KST_OFFSET).toISOString().slice(0, 19).replace('T', ' ');
 
+// 치지직이 응답 없이 멈춰도 실행이 15분(cron 한도)까지 붙잡혀 1분 수집이 쌓이지 않도록 끊는다
+export const FETCH_TIMEOUT_MS = 10_000;
+
 async function fetchContent(fetchImpl, url, name) {
-  const res = await fetchImpl(url, { headers: { 'User-Agent': USER_AGENT } });
+  const res = await fetchImpl(url, { headers: { 'User-Agent': USER_AGENT }, signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) });
   if (!res.ok) throw new Error(`${name} HTTP ${res.status}`);
   const body = await res.json();
   if (body?.code !== 200 || !body.content) {

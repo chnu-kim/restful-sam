@@ -65,11 +65,11 @@ describe('collect', () => {
     const first = await collect(env, { fetchImpl: chzzk(CLOSED), now: NOW, log });
     expect(first.changed).toBe(true);
     expect(first.data).toMatchObject({ since: '2026-10-01', checkedDays: ['2026-10-02'], live: false });
-    expect(log).toHaveBeenLastCalledWith(`갱신됨: status=CLOSE, openDate=${CLOSED.openDate}`);
+    expect(JSON.parse(log.mock.lastCall[0])).toEqual({ message: '갱신됨', status: 'CLOSE', openDate: CLOSED.openDate, live: false });
     const second = await collect(env, { fetchImpl: chzzk(CLOSED), now: NOW + 60000, log });
     expect(second.changed).toBe(false);
     expect(env.DB.writes).toBe(1);
-    expect(log).toHaveBeenLastCalledWith(`변경 없음: status=CLOSE, openDate=${CLOSED.openDate}`);
+    expect(JSON.parse(log.mock.lastCall[0]).message).toBe('변경 없음');
   });
 
   it('D1에 기록이 없으면 빈 기록을 만들지 않고 실패한다 (지난 기록 보호)', async () => {
@@ -86,7 +86,7 @@ describe('collect', () => {
     const r = await collect(env, { fetchImpl: chzzk(CLOSED), now: NOW, log: vi.fn(), warn });
     expect(r.changed).toBe(false);
     expect(env.DB.rows.get('streams')).toBe(newer);
-    expect(warn).toHaveBeenCalledWith('그 사이 다른 실행이 기록을 바꿔 이번 결과는 저장하지 않습니다');
+    expect(JSON.parse(warn.mock.lastCall[0]).message).toBe('그 사이 다른 실행이 기록을 바꿔 이번 결과는 저장하지 않습니다');
   });
 
   it('방송 중이면 매번 확인 시각을 남긴다', async () => {
@@ -109,7 +109,7 @@ describe('collect', () => {
     expect(f.mock.calls.some(([u]) => u.includes('/videos'))).toBe(false);
     const warn = vi.fn();
     const r = await collect(env, { fetchImpl: f, now: BACKFILL_NOW, log: vi.fn(), warn });
-    expect(warn).toHaveBeenCalledWith('다시보기 보충 실패: videos HTTP 503');
+    expect(JSON.parse(warn.mock.lastCall[0])).toEqual({ message: '다시보기 보충 실패', error: 'videos HTTP 503' });
     expect(r.data.streams).toHaveLength(1);
   });
 

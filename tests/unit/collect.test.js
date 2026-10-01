@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
-  CHANNEL_ID, DEFAULT_API_URL, DEFAULT_SERVICE_BASE, MAX_DETAIL_CALLS, applyLiveStatus, backfillFromReplays, emptyData,
+  CHANNEL_ID, DEFAULT_API_URL, DEFAULT_SERVICE_BASE, FETCH_TIMEOUT_MS, MAX_DETAIL_CALLS, applyLiveStatus, backfillFromReplays, emptyData,
   fetchLiveStatus, formatKst, parseKst, todayKst, validateData,
 } from '../../worker/collect.js';
 
@@ -35,7 +35,7 @@ describe('fetchLiveStatus', () => {
   it('content를 반환하고 User-Agent를 붙여 기본 URL로 호출한다', async () => {
     const f = okFetch(CLOSED);
     await expect(fetchLiveStatus(f)).resolves.toEqual(CLOSED);
-    expect(f).toHaveBeenCalledWith(DEFAULT_API_URL, { headers: { 'User-Agent': expect.stringContaining('Mozilla') } });
+    expect(f).toHaveBeenCalledWith(DEFAULT_API_URL, { headers: { 'User-Agent': expect.stringContaining('Mozilla') }, signal: expect.any(AbortSignal) });
     expect(DEFAULT_API_URL).toContain(CHANNEL_ID);
   });
 
@@ -62,6 +62,18 @@ describe('fetchLiveStatus', () => {
   it('JSON이 아니면 실패한다', async () => {
     const f = vi.fn(async () => new Response('<html>', { status: 200 }));
     await expect(fetchLiveStatus(f)).rejects.toThrow(SyntaxError);
+  });
+
+  it(`응답이 ${FETCH_TIMEOUT_MS / 1000}초 안에 없으면 끊는다`, async () => {
+    // AbortSignal.timeout은 가짜 타이머로 앞당길 수 없어, 시간이 다 된 신호를 돌려주게 해 연결만 확인한다
+    const spy = vi.spyOn(AbortSignal, 'timeout').mockReturnValue(AbortSignal.abort(new DOMException('timed out', 'TimeoutError')));
+    try {
+      const hang = vi.fn((_, { signal }) => (signal.aborted ? Promise.reject(signal.reason) : new Promise(() => {})));
+      await expect(fetchLiveStatus(hang)).rejects.toThrow('timed out');
+      expect(spy).toHaveBeenCalledWith(FETCH_TIMEOUT_MS);
+    } finally {
+      spy.mockRestore();
+    }
   });
 
   it('네트워크 오류를 그대로 전파한다', async () => {

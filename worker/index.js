@@ -33,15 +33,16 @@ export async function collect(env, { fetchImpl = fetch, now = Date.now(), servic
       next = await backfillFromReplays(next, { fetchImpl, serviceBase });
     } catch (e) {
       // 보충은 부가 기능이라 실패해도 live-status 결과는 저장한다
-      warn(`다시보기 보충 실패: ${e.message}`);
+      warn(JSON.stringify({ message: '다시보기 보충 실패', error: e.message }));
     }
   }
   let changed = JSON.stringify(next) !== doc.raw;
   if (changed && !(await saveDoc(env.DB, next, doc.raw))) {
-    warn('그 사이 다른 실행이 기록을 바꿔 이번 결과는 저장하지 않습니다');
+    warn(JSON.stringify({ message: '그 사이 다른 실행이 기록을 바꿔 이번 결과는 저장하지 않습니다' }));
     changed = false;
   }
-  log(`${changed ? '갱신됨' : '변경 없음'}: status=${live.status}, openDate=${live.openDate}`);
+  // 대시보드에서 검색·필터할 수 있도록 구조화된 JSON으로 남긴다
+  log(JSON.stringify({ message: changed ? '갱신됨' : '변경 없음', status: live.status, openDate: live.openDate, live: next.live }));
   return { changed, data: next };
 }
 
