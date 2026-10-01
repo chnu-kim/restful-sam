@@ -81,14 +81,21 @@ describe('오늘 카드', () => {
 });
 
 describe('통계', () => {
-  it('10/1 휴방이 휴방 일수와 연속 휴방에 반영된다', () => {
+  it('이번 달 기준: 10/1 휴방, 9월 방송은 세지 않는다', () => {
     mount(DATA, KST('2026-10-02 12:00:00'));
     const stats = [...document.querySelectorAll('.stat')].map((e) => e.textContent);
-    expect(stats).toEqual(['0일방송한 날', '1일휴방한 날', '0%방송률', '1일연속 휴방']);
+    expect(stats).toEqual(['0일이번 달 방송한 날', '1일이번 달 휴방한 날', '100%이번 달 휴방률', '1일연속 휴방']);
+  });
+
+  it('이번 달에 판정된 날이 없으면 휴방률은 -', () => {
+    mount(DATA, KST('2026-10-01 12:00:00'));
+    const stats = [...document.querySelectorAll('.stat')].map((e) => e.textContent);
+    expect(stats.slice(0, 3)).toEqual(['0일이번 달 방송한 날', '0일이번 달 휴방한 날', '-이번 달 휴방률']);
   });
 
   it('연속 방송 라벨', () => {
     mount({ ...DATA, streams: [st('2026-10-02 09:00:00', '2026-10-02 11:00:00')] }, KST('2026-10-02 12:00:00'));
+    expect(document.querySelectorAll('.stat')[2].textContent).toBe('50%이번 달 휴방률');
     expect(document.querySelectorAll('.stat')[3].textContent).toBe('1일연속 방송');
   });
 });

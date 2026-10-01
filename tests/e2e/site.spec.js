@@ -43,7 +43,7 @@ test('오늘 아직 방송 전이면 미정, 어제 휴방 안내와 통계', as
   await expect(page).toHaveTitle('삼덕이 휴방 체크');
   await expect(page.locator('#today .verdict')).toHaveText('아직 안 켬');
   await expect(page.locator('#today .detail')).toHaveText('어제는 휴방이었어요.');
-  await expect(page.locator('.stat')).toHaveText(['0일방송한 날', '1일휴방한 날', '0%방송률', '1일연속 휴방']);
+  await expect(page.locator('.stat')).toHaveText(['0일이번 달 방송한 날', '1일이번 달 휴방한 날', '100%이번 달 휴방률', '1일연속 휴방']);
   await expect(day(page, '2026-10-02')).toHaveClass(/pending/);
   await expect(day(page, '2026-10-03')).toBeDisabled();
   await expect(page.locator('#footer')).toContainText('2026-10-01부터 기록');

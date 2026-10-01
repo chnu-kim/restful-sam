@@ -38,9 +38,9 @@ export function renderToday(root, state) {
 export function renderStats(root, state) {
   const s = computeStats(ctx(state));
   root.getElementById('stats').innerHTML = [
-    [s.on + '일', '방송한 날'],
-    [s.off + '일', '휴방한 날'],
-    [s.rate + '%', '방송률'],
+    [s.on + '일', '이번 달 방송한 날'],
+    [s.off + '일', '이번 달 휴방한 날'],
+    [s.offRate === null ? '-' : s.offRate + '%', '이번 달 휴방률'],
     [s.streak + '일', s.streakKind === 'off' ? '연속 휴방' : '연속 방송'],
   ].map(([v, l]) => `<div class="stat"><b>${v}</b><span>${l}</span></div>`).join('');
 }
