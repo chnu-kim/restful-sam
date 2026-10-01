@@ -211,6 +211,9 @@ test('320px에서도 미확인 표시가 한 줄로 보인다', async ({ page })
   await expect(mark).toHaveText('미확인');
   const lines = await mark.evaluate((el) => el.getBoundingClientRect().height / parseFloat(getComputedStyle(el).lineHeight));
   expect(Math.round(lines)).toBe(1);
+  // 한 줄이어도 칸 밖으로 넘치면 안 된다
+  const overflow = await mark.evaluate((el) => el.getBoundingClientRect().left + el.scrollWidth - el.parentElement.getBoundingClientRect().right);
+  expect(overflow).toBeLessThanOrEqual(0);
 });
 
 test('오늘(점선) 칸에 키보드로 포커스하면 포커스 링이 보인다', async ({ page }) => {
@@ -228,6 +231,8 @@ test('키보드로 날짜를 고르면 포커스가 같은 날짜에 남고 Tab�
   await page.keyboard.press('Enter');
   await expect(page.locator('#info')).toContainText('2026-10-01 (목)');
   await expect(day(page, '2026-10-01')).toBeFocused();
+  // 포커스만 있고 링이 안 보이면 키보드 사용자는 위치를 잃는다
+  expect(await day(page, '2026-10-01').evaluate((el) => el.matches(':focus-visible'))).toBe(true);
   await page.keyboard.press('Tab');
   await expect(day(page, '2026-10-02')).toBeFocused();
 });
@@ -245,6 +250,17 @@ test('이전 달 버튼이 비활성화되면 키보드 포커스가 다음 달 
   await page.keyboard.press('Enter');
   await expect(page.locator('#prev')).toBeDisabled();
   await expect(page.locator('#next')).toBeFocused();
+  expect(await page.locator('#next').evaluate((el) => el.matches(':focus-visible'))).toBe(true);
+});
+
+test('고대비(forced-colors) 모드에서도 선택된 칸의 키보드 포커스가 선택 표시와 구분된다', async ({ page }) => {
+  await page.emulateMedia({ forcedColors: 'active' });
+  await open(page);
+  await day(page, '2026-10-01').focus();
+  await page.keyboard.press('Enter');
+  await expect(day(page, '2026-10-01')).toBeFocused();
+  // 고대비에선 box-shadow 링이 그려지지 않으므로 칸 바깥 outline으로 보여야 한다 (선택 표시는 안쪽 -2px)
+  expect(await day(page, '2026-10-01').evaluate((el) => getComputedStyle(el).outlineOffset)).toBe('2px');
 });
 
 test('달력 칸이 달력 영역 밖으로 넘치지 않는다', async ({ page }) => {

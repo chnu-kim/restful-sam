@@ -149,6 +149,10 @@
   .day.future, .day.blank { background: transparent; color: var(--muted); cursor: default; }
   .day.nodata { color: var(--muted); }
   .day.selected { outline: 2px solid var(--text); outline-offset: -2px; }
+  /* 고대비 모드에선 box-shadow 링이 사라지므로 칸 바깥 outline으로 포커스를 그린다. 선택·오늘 칸 outline보다 우선하도록 클래스를 겹쳐 쓴다 */
+  @media (forced-colors: active) {
+    .day.day:focus-visible { outline: 2px solid CanvasText; outline-offset: 2px; }
+  }
 
   .legend { display: flex; flex-wrap: wrap; gap: 14px; margin-top: 14px; font-size: 13px; color: var(--muted); }
   .legend i { display: inline-block; width: 12px; height: 12px; border-radius: 4px; margin-right: 6px; vertical-align: -1px; }
