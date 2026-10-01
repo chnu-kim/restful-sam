@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-  addDays, addMonths, computeStats, currentStreak, dayOfWeek, dayMinutes, dayStatus, dayTimeRange, durationLong, durationShort, esc, firstMonth, groupByDay, hm, isFinal, makeContext, monthDays, monthLabel, streamMinutes, todayKst,
+  addDays, addMonths, barPercent, computeStats, currentStreak, dayOfWeek, dayMinutes, dayStatus, dayTimeRange, durationLong, esc, firstMonth, groupByDay, hm, isFinal, makeContext, monthDays, monthLabel, streamMinutes, todayKst,
 } from '../../src/calendar.js';
 
 const s = (openDate, closeDate = null) => ({ openDate, closeDate, title: 't', category: null });
@@ -218,13 +218,20 @@ describe('방송 시간', () => {
   });
 
   it.each([
-    [0, '0m', '0분'],
-    [45, '45m', '45분'],
-    [480, '8h', '8시간'],
-    [502, '8h22m', '8시간 22분'],
-    [725, '12h05m', '12시간 5분'],
-  ])('%i분 → %s / %s', (m, short, long) => {
-    expect(durationShort(m)).toBe(short);
+    [0, '0분'],
+    [45, '45분'],
+    [480, '8시간'],
+    [502, '8시간 22분'],
+    [725, '12시간 5분'],
+  ])('%i분 → %s', (m, long) => {
     expect(durationLong(m)).toBe(long);
+  });
+
+  it('막대는 12시간이 가득, 넘으면 가득, 아주 짧아도 최소 4%', () => {
+    expect(barPercent(360)).toBe(50);
+    expect(barPercent(502)).toBe(70);
+    expect(barPercent(720)).toBe(100);
+    expect(barPercent(900)).toBe(100);
+    expect(barPercent(5)).toBe(4);
   });
 });

@@ -39,14 +39,11 @@ export function dayMinutes(streams) {
   return streams.reduce((sum, s) => sum + streamMinutes(s), 0);
 }
 
-// 달력 칸용 '8h22m', 상세용 '8시간 22분'
-export function durationShort(m) {
-  const h = Math.floor(m / 60);
-  const r = m % 60;
-  if (!h) return `${r}m`;
-  return r ? `${h}h${String(r).padStart(2, '0')}m` : `${h}h`;
-}
+// 달력 칸 막대 길이(%). 12시간이면 가득 차고, 아주 짧은 방송도 보이도록 최소 길이를 둔다
+export const BAR_FULL_MINUTES = 12 * 60;
+export const barPercent = (m) => Math.max(4, Math.min(100, Math.round((m / BAR_FULL_MINUTES) * 100)));
 
+// 상세용 '8시간 22분'
 export function durationLong(m) {
   const h = Math.floor(m / 60);
   const r = m % 60;
