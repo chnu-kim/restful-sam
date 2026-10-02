@@ -73,11 +73,12 @@ function categoryHistory(prev, stream, at) {
 // checkedAt: 이번 수집 시각(ISO). 방송 중일 때만 남겨 페이지가 live 값의 신선도를 판단하게 한다.
 // 방송 중인 방송에는 마지막으로 방송 중인 걸 본 시각(seenAt, KST)을 남겨, 종료를 놓쳤을 때 종료 시각 추정에 쓴다
 export function applyLiveStatus(data, live, today, checkedAt = null) {
-  // 형식이 바뀌면 정렬·같은 방송 비교가 조용히 어긋나므로, 조회 실패처럼 throw해 아무것도 저장하지 않는다
-  for (const field of ['openDate', 'closeDate']) {
+  const isLive = live.status === 'OPEN';
+  // 형식이 바뀌면 정렬·같은 방송 비교가 조용히 어긋나므로, 조회 실패처럼 throw해 아무것도 저장하지 않는다.
+  // 방송 중에는 closeDate를 저장하지 않으므로 보지 않는다 (쓰지 않는 값 때문에 수집이 멈추지 않도록)
+  for (const field of isLive ? ['openDate'] : ['openDate', 'closeDate']) {
     if (live[field] != null && !isKst(live[field])) throw new Error(`live-status ${field} 형식 이상: ${JSON.stringify(live[field])}`);
   }
-  const isLive = live.status === 'OPEN';
   const { liveCheckedAt, ...rest } = normalize(data);
   const next = { ...rest, live: isLive, streams: [...data.streams] };
   if (isLive && checkedAt) next.liveCheckedAt = checkedAt;

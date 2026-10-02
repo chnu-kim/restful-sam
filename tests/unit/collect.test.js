@@ -205,9 +205,16 @@ describe('applyLiveStatus', () => {
     ['openDate', { ...CLOSED, openDate: '2026-09-25 24:00:00' }],
     ['openDate', { ...CLOSED, openDate: '2026-09-25 08:49:35.000' }],
     ['closeDate', { ...CLOSED, closeDate: '2026-09-25' }],
-    ['closeDate', { ...OPEN, closeDate: 'x' }],
   ])('%s 형식이 YYYY-MM-DD HH:MM:SS가 아니면 throw한다 (%#)', (field, live) => {
     expect(() => applyLiveStatus(base, live, '2026-10-02')).toThrow(`live-status ${field} 형식 이상`);
+  });
+
+  // 방송 중에는 closeDate를 저장하지 않으므로, 형식이 달라도 수집을 멈추지 않는다
+  it.each(['', 'x', '2026-10-02T20:00:00Z'])('방송 중이면 closeDate 형식은 보지 않는다: %j', (closeDate) => {
+    const next = applyLiveStatus(base, { ...OPEN, closeDate }, '2026-10-02', '2026-10-02T12:00:00.000Z');
+    expect(next.live).toBe(true);
+    expect(next.streams).toHaveLength(1);
+    expect(next.streams[0]).toMatchObject({ openDate: OPEN.openDate, closeDate: null });
   });
 
   it('누락된 필드는 기본값으로 채운다', () => {
