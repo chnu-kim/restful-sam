@@ -1,11 +1,5 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
-  <rect width="32" height="32" rx="7" fill="#1d1d1b"/>
-  <rect x="5" y="5" width="10" height="10" rx="2" fill="#3a3935"/>
-  <rect x="17" y="5" width="10" height="10" rx="2" fill="#3a3935"/>
-  <rect x="5" y="17" width="10" height="10" rx="2" fill="#3a3935"/>
-  <rect x="17" y="17" width="10" height="10" rx="2" fill="#3a3935"/>
-  <path d="M5 9h10v4a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2z" fill="#1fd286"/>
-  <path d="M5 20h10v5a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2z" fill="#1fd286"/>
-  <path d="M17 23h10v2a2 2 0 0 1-2 2h-6a2 2 0 0 1-2-2z" fill="#1fd286"/>
-  <circle cx="22" cy="10" r="2.5" fill="#ff6b6f"/>
+  <!-- 아래부터 채워진 달력 칸. 브라우저 테마에 따라 검정/흰색 -->
+  <style>path { fill: #000; } @media (prefers-color-scheme: dark) { path { fill: #fff; } }</style>
+  <path fill-rule="evenodd" d="M8 2h16a6 6 0 0 1 6 6v16a6 6 0 0 1-6 6H8a6 6 0 0 1-6-6V8a6 6 0 0 1 6-6zm0 4a2 2 0 0 0-2 2v8h20V8a2 2 0 0 0-2-2z"/>
 </svg>
