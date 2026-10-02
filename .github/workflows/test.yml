@@ -6,6 +6,10 @@ on:
     paths-ignore: ['data/**']
   pull_request:
 
+# 테스트는 코드를 읽기만 하므로 GITHUB_TOKEN 권한을 최소로 둔다
+permissions:
+  contents: read
+
 jobs:
   unit:
     runs-on: ubuntu-latest

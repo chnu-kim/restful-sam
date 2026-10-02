@@ -17,6 +17,11 @@ export function todayKst(now = Date.now()) {
 // 'YYYY-MM-DD HH:MM:SS'(KST) <-> epoch ms
 export const parseKst = (s) => Date.parse(s.replace(' ', 'T') + '+09:00');
 export const formatKst = (ms) => new Date(ms + KST_OFFSET).toISOString().slice(0, 19).replace('T', ' ');
+// 비공식 API의 시각이 위 형식인지 확인한다. Date.parse는 2월 30일·24시를 다음 날로 넘겨 받아 주므로,
+// 다시 형식화한 값이 원래 문자열과 같은지 비교해 없는 날짜까지 거른다
+const KST_RE = /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/;
+const roundTrips = (s, t) => !Number.isNaN(t) && formatKst(t) === s;
+export const isKst = (s) => typeof s === 'string' && KST_RE.test(s) && roundTrips(s, parseKst(s));
 
 // 치지직이 응답 없이 멈춰도 실행이 15분(cron 한도)까지 붙잡혀 1분 수집이 쌓이지 않도록 끊는다
 export const FETCH_TIMEOUT_MS = 10_000;
@@ -68,6 +73,10 @@ function categoryHistory(prev, stream, at) {
 // checkedAt: 이번 수집 시각(ISO). 방송 중일 때만 남겨 페이지가 live 값의 신선도를 판단하게 한다.
 // 방송 중인 방송에는 마지막으로 방송 중인 걸 본 시각(seenAt, KST)을 남겨, 종료를 놓쳤을 때 종료 시각 추정에 쓴다
 export function applyLiveStatus(data, live, today, checkedAt = null) {
+  // 형식이 바뀌면 정렬·같은 방송 비교가 조용히 어긋나므로, 조회 실패처럼 throw해 아무것도 저장하지 않는다
+  for (const field of ['openDate', 'closeDate']) {
+    if (live[field] != null && !isKst(live[field])) throw new Error(`live-status ${field} 형식 이상: ${JSON.stringify(live[field])}`);
+  }
   const isLive = live.status === 'OPEN';
   const { liveCheckedAt, ...rest } = normalize(data);
   const next = { ...rest, live: isLive, streams: [...data.streams] };
@@ -132,7 +141,8 @@ export async function backfillFromReplays(data, { fetchImpl = fetch, serviceBase
   const closed = new Map(); // 저장된 시작 시각(ms) -> 채울 종료 시각
   let calls = 0;
   for (const v of list.data ?? []) {
-    if (v.videoType !== 'REPLAY' || !v.publishDate || !v.duration) continue;
+    // 보충은 부가 기능이라 형식이 이상한 영상은 상세 조회 없이 건너뛴다
+    if (v.videoType !== 'REPLAY' || !isKst(v.publishDate) || !(Number.isFinite(v.duration) && v.duration > 0)) continue;
     const estimated = parseKst(v.publishDate) - v.duration * 1000;
     const near = (t) => Math.abs(t - estimated) <= MATCH_WINDOW_MS;
     const sameKnown = known.some((k) => near(k.t) && k.span !== null && Math.abs(k.span - v.duration * 1000) <= SAME_DURATION_MS);
@@ -141,7 +151,7 @@ export async function backfillFromReplays(data, { fetchImpl = fetch, serviceBase
     calls++;
     const detail = await fetchContent(fetchImpl, `${serviceBase}/v3/videos/${v.videoNo}`, 'video');
     const openDate = detail.liveOpenDate;
-    if (!openDate) continue;
+    if (!isKst(openDate)) continue;
     const closeDate = formatKst(parseKst(openDate) + v.duration * 1000);
     const t = parseKst(openDate);
     const match = closest(pending, t);

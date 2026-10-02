@@ -2,8 +2,12 @@
 // 런타임은 이 파일의 export를 모두 핸들러로 보므로 default 외에는 export하지 않는다
 import { collect, loadDoc } from './run.js';
 
+// Worker가 먼저 처리하는 응답에는 public/_headers가 붙지 않으므로 nosniff를 직접 단다
 const json = (body, status = 200) =>
-  new Response(body, { status, headers: { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' } });
+  new Response(body, {
+    status,
+    headers: { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff' },
+  });
 
 export default {
   async fetch(request, env) {

@@ -196,6 +196,20 @@ describe('applyLiveStatus', () => {
     expect(next.streams).toEqual([]);
   });
 
+  // 비공식 API라 형식이 바뀌면 정렬·비교가 조용히 어긋나므로, 조회 실패처럼 throw해 저장하지 않는다
+  it.each([
+    ['openDate', { ...CLOSED, openDate: '2026-09-25T08:49:35Z' }],
+    ['openDate', { ...CLOSED, openDate: 1758757775000 }],
+    ['openDate', { ...CLOSED, openDate: '2026-13-45 99:99:99' }],
+    ['openDate', { ...CLOSED, openDate: '2026-02-30 10:00:00' }],
+    ['openDate', { ...CLOSED, openDate: '2026-09-25 24:00:00' }],
+    ['openDate', { ...CLOSED, openDate: '2026-09-25 08:49:35.000' }],
+    ['closeDate', { ...CLOSED, closeDate: '2026-09-25' }],
+    ['closeDate', { ...OPEN, closeDate: 'x' }],
+  ])('%s 형식이 YYYY-MM-DD HH:MM:SS가 아니면 throw한다 (%#)', (field, live) => {
+    expect(() => applyLiveStatus(base, live, '2026-10-02')).toThrow(`live-status ${field} 형식 이상`);
+  });
+
   it('누락된 필드는 기본값으로 채운다', () => {
     const next = applyLiveStatus(base, { status: 'CLOSE', openDate: '2026-10-01 10:00:00' }, '2026-10-02');
     expect(next.streams[0]).toEqual({ openDate: '2026-10-01 10:00:00', closeDate: null, title: '', category: null });
@@ -343,6 +357,26 @@ describe('backfillFromReplays', () => {
       [replay(3, '2026-09-20 10:00:00', 100, { videoType: 'UPLOAD' }), replay(4, null, 100), replay(5, '2026-09-20 10:00:00', 0), replay(6, '2026-09-19 10:00:00', 100)],
       { 6: { liveOpenDate: null } },
     );
+    expect(await backfillFromReplays(known, { fetchImpl: f, serviceBase: BASE })).toBe(known);
+    expect(f).toHaveBeenCalledTimes(2);
+  });
+
+  it('publishDate·duration 형식이 이상한 영상은 상세 조회 없이 건너뛴다', async () => {
+    const f = replayFetch(
+      [
+        replay(20, '2026-09-20T10:00:00', 100),
+        replay(21, '2026-09-20 10:00:00', '100'),
+        replay(22, '2026-09-20 10:00:00', -100),
+        replay(23, '2026-09-20 10:00:00', Infinity),
+      ],
+      Object.fromEntries([20, 21, 22, 23].map((n) => [n, { liveOpenDate: '2026-09-20 09:00:00' }])),
+    );
+    expect(await backfillFromReplays(known, { fetchImpl: f, serviceBase: BASE })).toBe(known);
+    expect(f).toHaveBeenCalledTimes(1);
+  });
+
+  it('상세의 liveOpenDate 형식이 이상하면 건너뛴다', async () => {
+    const f = replayFetch([replay(24, '2026-09-20 12:00:00', 3600)], { 24: { liveOpenDate: '2026-09-20 11:00' } });
     expect(await backfillFromReplays(known, { fetchImpl: f, serviceBase: BASE })).toBe(known);
     expect(f).toHaveBeenCalledTimes(2);
   });

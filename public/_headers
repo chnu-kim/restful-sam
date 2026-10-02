@@ -1,0 +1,8 @@
+# Cloudflare Workers Static Assets가 정적 응답에 붙이는 헤더 (이 파일 자체는 서빙되지 않는다).
+# Worker가 먼저 처리하는 /data/*에는 붙지 않아 worker/index.js에서 따로 단다.
+# script-src의 해시는 index.html 인라인 스크립트 2개(테마 초기화, 부트 모듈)의 것이다. 스크립트를 고치면 해시도 바꿔야 하며, tests/unit/headers.test.js가 어긋남을 잡는다.
+# style-src의 'unsafe-inline'은 인라인 <style>과 style 속성(달력 칸의 --fill 등) 때문이다.
+/*
+  Content-Security-Policy: default-src 'self'; script-src 'self' 'sha256-entfcl0IDpM4MQ3iK6GuZpe3VBG8E9mU4KI5TzOJOiU=' 'sha256-qx/qC/I7QwN3OSCZpmYYni2LuQXTDq0EyP/HipuqS2M='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'; object-src 'none'
+  X-Content-Type-Options: nosniff
+  Referrer-Policy: no-referrer

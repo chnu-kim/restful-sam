@@ -103,6 +103,12 @@ describe('collect', () => {
     expect(env.DB.writes).toBe(0);
   });
 
+  it('시각 형식이 이상하면 조회 실패처럼 기록을 건드리지 않는다 (checkedDays도 남기지 않음)', async () => {
+    const env = { DB: fakeDb(emptyData('2026-10-01')) };
+    await expect(collect(env, { fetchImpl: chzzk({ ...CLOSED, openDate: '2026-09-25T08:49:35Z' }), now: NOW })).rejects.toThrow('형식 이상');
+    expect(env.DB.writes).toBe(0);
+  });
+
   it(`다시보기 보충은 ${BACKFILL_EVERY_MIN}분에 한 번만 하고, 실패해도 경고만 남긴다`, async () => {
     const env = { DB: fakeDb(emptyData('2026-10-01')) };
     const f = chzzk(CLOSED, { videosStatus: 503 });
@@ -134,12 +140,14 @@ describe('Worker 핸들러', () => {
     expect(res.status).toBe(200);
     expect(res.headers.get('Cache-Control')).toBe('no-store');
     expect(res.headers.get('Content-Type')).toContain('application/json');
+    expect(res.headers.get('X-Content-Type-Options')).toBe('nosniff');
     expect(await res.json()).toEqual(data);
   });
 
   it('기록이 없으면 404', async () => {
     const res = await worker.fetch(new Request('https://x/data/streams.json'), { DB: fakeDb() });
     expect(res.status).toBe(404);
+    expect(res.headers.get('X-Content-Type-Options')).toBe('nosniff');
   });
 
   it('그 외 경로는 정적 자산으로 넘긴다', async () => {
