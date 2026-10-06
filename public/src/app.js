@@ -1,11 +1,13 @@
 // 페이지 렌더링. 상태는 state 객체 하나로 들고, DOM은 root(document)에서 찾는다.
 import {
   DOW, addDays, addMonths, computeStats, dayOfWeek, dayMinutes, dayStatus, dayTimeRange, durationLong, esc, fillPercent, firstMonth, hm, makeContext, monthDays, monthLabel,
-  streamMinutes, todayKst,
+  offStreakBefore, streamMinutes, todayKst,
 } from './calendar.js';
 
 const MARKS = { on: '방송', off: '휴방', pending: '?', unknown: '미확인', nodata: '', future: '' };
 const LABELS = { on: '방송', off: '휴방', pending: '아직 방송 전', unknown: '확인 전', nodata: '기록 없음', future: '' };
+// 날짜 상세와 오늘 카드가 같은 문구를 쓴다. 기록 시작 전·확인 전에 닿아 정확히 모르면 '이상'
+const offStreakText = (r) => `${r.days}일${r.atLeast ? ' 이상' : ''} 휴방 후 첫 방송`;
 
 export function createState(data, now = Date.now()) {
   const today = todayKst(now);
@@ -70,6 +72,10 @@ export function renderToday(root, state) {
       unknown: '어제 방송 여부는 아직 확인 중이에요.',
     }[y] ?? '';
   }
+  // 휴방 뒤 처음 켰으면 며칠 쉬었는지 덧붙인다. 자정을 넘긴 방송은 시작일 기준이고, 아직 안 켰으면 기준일이 없다
+  const anchor = liveStream ? liveStream.openDate.slice(0, 10) : streams.length ? today : null;
+  const r = anchor && offStreakBefore(anchor, ctx(state));
+  if (r) detail += `<br>${offStreakText(r)}이에요.`;
   root.getElementById('today').innerHTML =
     `<div class="label">오늘 (${today})</div><div class="verdict ${cls}">${verdict}</div><div class="detail">${detail}</div>${staleNotice(state)}`;
 }
@@ -155,7 +161,9 @@ export function dayDetail(state, d) {
   else if (s === 'pending') body = '<div class="muted">아직 방송 기록이 없어요.</div>';
   else if (s === 'unknown') body = '<div class="muted">아직 확인되지 않았어요. 다음 자동 확인 후 반영돼요.</div>';
   else body = '<div class="muted">기록을 시작하기 전이라 알 수 없어요.</div>';
-  return `<b>${d} (${DOW[dayOfWeek(d)]})</b>${body}`;
+  // 휴방 뒤 첫 방송이면 날 단위 사실이라 방송 목록이 아니라 날짜 바로 아래에 둔다
+  const r = offStreakBefore(d, ctx(state));
+  return `<b>${d} (${DOW[dayOfWeek(d)]})</b>${r ? `<div class="muted">${offStreakText(r)}</div>` : ''}${body}`;
 }
 
 export function renderInfo(root, state) {

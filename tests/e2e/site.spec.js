@@ -56,7 +56,7 @@ test('방송 중이면 라이브 표시', async ({ page }) => {
   await open(page, { data: { ...BASE, live: true, liveCheckedAt: at('2026-10-02 20:59:00'), streams: [st('2026-10-02 20:00:00', null, '저챗')] }, now: '2026-10-02 21:00:00' });
   await expect(page.locator('#today .verdict')).toHaveText('방송 중');
   await expect(page.locator('#today .live-dot')).toBeVisible();
-  await expect(page.locator('#today .detail')).toHaveText('20:00 시작 · 저챗');
+  await expect(page.locator('#today .detail')).toHaveText('20:00 시작 · 저챗1일 이상 휴방 후 첫 방송이에요.');
   await expect(day(page, '2026-10-02')).toHaveClass(/\bon\b/);
 });
 
@@ -77,7 +77,36 @@ test('자정을 넘겨 이어지는 방송은 오늘 카드에 방송 중으로 
   const data = { ...BASE, live: true, liveCheckedAt: at('2026-10-03 00:59:00'), checkedDays: ['2026-10-02', '2026-10-03'], streams: [...BASE.streams, st('2026-10-02 23:00:00', null, '심야')] };
   await open(page, { data, now: '2026-10-03 01:00:00' });
   await expect(page.locator('#today .verdict')).toHaveText('방송 중');
-  await expect(page.locator('#today .detail')).toHaveText('어제 23:00 시작 · 심야');
+  await expect(page.locator('#today .detail')).toHaveText('어제 23:00 시작 · 심야1일 이상 휴방 후 첫 방송이에요.');
+});
+
+// 휴방 뒤 첫 방송이면 며칠 휴방했는지 오늘 카드와 날짜 상세에 보여 준다 (9/26~10/1 휴방 6일)
+for (const width of [360, 1024]) {
+  test(`${width}px에서 휴방 뒤 첫 방송이면 며칠 휴방했는지 보여 준다`, async ({ page }) => {
+    const data = { ...BASE, since: '2026-09-24', streams: [...BASE.streams, st('2026-10-02 09:00:00', '2026-10-02 10:30:00')] };
+    await page.setViewportSize({ width, height: 900 });
+    await open(page, { data });
+    await expect(page.locator('#today .detail')).toContainText('6일 휴방 후 첫 방송이에요.');
+    if (width === 1024) {
+      await day(page, '2026-10-02').hover(); // 마우스 올리면 선택 없이도 같은 상세가 툴팁으로 뜬다
+      await expect(page.locator('#tip')).toContainText('6일 휴방 후 첫 방송');
+    }
+    await day(page, '2026-10-02').click();
+    await expect(page.locator('#info')).toHaveText(/^2026-10-02 \(금\)6일 휴방 후 첫 방송/);
+    await expect(page.locator('#info')).toBeInViewport();
+    await day(page, '2026-10-01').click();
+    await expect(page.locator('#info')).toHaveText('2026-10-01 (목)휴방');
+  });
+}
+
+test('320px에서 휴방 문구가 있어도 가로 스크롤이 없다', async ({ page }) => {
+  await page.setViewportSize({ width: 320, height: 800 });
+  await open(page, { data: { ...BASE, streams: [...BASE.streams, st('2026-10-02 09:00:00', '2026-10-02 10:30:00')] } });
+  await expect(page.locator('#today .detail')).toContainText('1일 이상 휴방 후 첫 방송');
+  await day(page, '2026-10-02').click();
+  await expect(page.locator('#info')).toContainText('1일 이상 휴방 후 첫 방송');
+  const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
+  expect(overflow).toBeLessThanOrEqual(0);
 });
 
 // 칸 전체가 하루(24시간)이고 방송 시간만큼 아래부터 채운다. 폰과 데스크톱에서 같게 보인다

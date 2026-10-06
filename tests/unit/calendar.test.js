@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-  addDays, addMonths, computeStats, currentStreak, dayOfWeek, dayMinutes, dayStatus, dayTimeRange, durationLong, esc, fillPercent, firstMonth, groupByDay, hm, isFinal, makeContext, monthDays, monthLabel, streamMinutes, todayKst,
+  addDays, addMonths, computeStats, currentStreak, dayOfWeek, dayMinutes, dayStatus, dayTimeRange, durationLong, esc, fillPercent, firstMonth, groupByDay, hm, isFinal, makeContext, monthDays, monthLabel, offStreakBefore, streamMinutes, todayKst,
 } from '../../public/src/calendar.js';
 
 const s = (openDate, closeDate = null) => ({ openDate, closeDate, title: 't', category: null });
@@ -124,6 +124,65 @@ describe('computeStats (월별) / currentStreak', () => {
   it('연속 기록은 기록 시작 전(nodata)에서 멈춘다', () => {
     const ctx = ctxOf([], '2026-10-01', '2026-10-03');
     expect(currentStreak(ctx)).toEqual({ streak: 2, streakKind: 'off' });
+  });
+});
+
+describe('offStreakBefore', () => {
+  it('방송한 날 직전에 이어진 휴방 일수를 달 경계를 넘어 센다 (9/26~10/1 휴방)', () => {
+    const ctx = ctxOf([s('2026-09-25 10:00:00'), s('2026-10-02 10:00:00')], '2026-09-24', '2026-10-03');
+    expect(offStreakBefore('2026-10-02', ctx)).toEqual({ days: 6, atLeast: false });
+  });
+
+  it('해 경계도 넘고, 하루에 방송이 여러 개여도 결과는 하나', () => {
+    const ctx = ctxOf([s('2025-12-28 10:00:00'), s('2026-01-03 10:00:00'), s('2026-01-03 20:00:00')], '2025-12-20', '2026-01-04');
+    expect(offStreakBefore('2026-01-03', ctx)).toEqual({ days: 5, atLeast: false });
+  });
+
+  it('1일 휴방 뒤 방송도 그대로 1일', () => {
+    const ctx = ctxOf([s('2026-10-01 10:00:00'), s('2026-10-03 10:00:00')], '2026-09-24', '2026-10-04');
+    expect(offStreakBefore('2026-10-03', ctx)).toEqual({ days: 1, atLeast: false });
+  });
+
+  it('기록 시작 전에 닿으면 하한(이상)으로 말한다', () => {
+    const ctx = ctxOf([s('2026-10-03 10:00:00')], '2026-10-01', '2026-10-04');
+    expect(offStreakBefore('2026-10-03', ctx)).toEqual({ days: 2, atLeast: true });
+  });
+
+  it('전날이 바로 기록 시작 전이면 null (기록 시작일 방송, 기록 시작 전 방송)', () => {
+    expect(offStreakBefore('2026-10-01', ctxOf([s('2026-10-01 10:00:00')], '2026-10-01', '2026-10-03'))).toBeNull();
+    expect(offStreakBefore('2026-09-25', ctxOf([s('2026-09-25 10:00:00')], '2026-10-01', '2026-10-03'))).toBeNull();
+  });
+
+  it('확인 전(unknown) 날은 휴방으로 세지 않고 거기서 멈춰 하한으로 말한다', () => {
+    // 10/3 수집이 없어 10/2가 확인 전
+    const streams = [s('2026-10-01 10:00:00'), s('2026-10-05 10:00:00')];
+    const ctx = ctxOf(streams, '2026-09-24', '2026-10-06', ['2026-10-01', '2026-10-04', '2026-10-05', '2026-10-06']);
+    expect(offStreakBefore('2026-10-05', ctx)).toEqual({ days: 2, atLeast: true });
+    // 10/5 수집이 없어 바로 전날(10/4)이 확인 전
+    const ctx2 = ctxOf(streams, '2026-09-24', '2026-10-06', ['2026-10-01', '2026-10-04', '2026-10-06']);
+    expect(offStreakBefore('2026-10-05', ctx2)).toBeNull();
+  });
+
+  it('연속 방송이면 null', () => {
+    const ctx = ctxOf([s('2026-10-01 10:00:00'), s('2026-10-02 10:00:00')], '2026-09-24', '2026-10-03');
+    expect(offStreakBefore('2026-10-02', ctx)).toBeNull();
+  });
+
+  it.each([
+    ['2026-10-02', '휴방'],
+    ['2026-10-03', '확인 전'],
+    ['2026-10-05', '오늘 미정(pending)'],
+    ['2026-09-20', '기록 시작 전'],
+    ['2026-10-06', '미래'],
+  ])('방송한 날이 아니면 null: %s (%s)', (d) => {
+    const ctx = ctxOf([s('2026-10-01 10:00:00')], '2026-09-24', '2026-10-05', ['2026-10-01', '2026-10-03']);
+    expect(offStreakBefore(d, ctx)).toBeNull();
+  });
+
+  it('자정을 넘긴 방송은 시작일 기준으로 센다', () => {
+    const ctx = ctxOf([s('2026-09-30 10:00:00', '2026-09-30 12:00:00'), s('2026-10-04 23:50:00', '2026-10-05 03:00:00')], '2026-09-24', '2026-10-06');
+    expect(offStreakBefore('2026-10-04', ctx)).toEqual({ days: 3, atLeast: false });
+    expect(offStreakBefore('2026-10-05', ctx)).toBeNull();
   });
 });
 
