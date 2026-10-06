@@ -57,14 +57,14 @@ describe('오늘 카드', () => {
     mount(data, KST('2026-10-02 21:00:00'));
     expect($('#today .verdict').textContent).toBe('방송 중');
     expect($('#today .live-dot')).not.toBeNull();
-    expect($('#today .detail').textContent).toBe('20:00 시작 · 저챗');
+    expect($('#today .detail').textContent).toBe('20:00 시작 · 저챗1일 이상 휴방 후 첫 방송이에요.');
   });
 
   it('오늘 방송이 끝났으면 방송함 + 여러 방송을 모두 보여준다', () => {
     const data = { ...DATA, streams: [st('2026-10-02 09:00:00', '2026-10-02 11:00:00', 'A'), st('2026-10-02 20:00:00', '2026-10-02 23:00:00', 'B')] };
     mount(data, KST('2026-10-02 23:30:00'));
     expect($('#today .verdict').textContent).toBe('방송함');
-    expect($('#today .detail').innerHTML).toBe('09:00~11:00 · A<br>20:00~23:00 · B');
+    expect($('#today .detail').innerHTML).toBe('09:00~11:00 · A<br>20:00~23:00 · B<br>1일 이상 휴방 후 첫 방송이에요.');
   });
 
   it('live 플래그가 남아 있어도 열린 방송이 없으면 방송함으로 본다', () => {
@@ -80,6 +80,18 @@ describe('오늘 카드', () => {
     expect($('#today img')).toBeNull();
     expect($('#today .detail').textContent).toContain('<img src=x');
   });
+
+  it('휴방 뒤 첫 방송이면 며칠 휴방했는지 덧붙인다 (9/26~10/1 휴방)', () => {
+    const data = { ...DATA, since: '2026-09-24', live: true, liveCheckedAt: at('2026-10-02 20:59:00'), streams: [...DATA.streams, st('2026-10-02 20:00:00', null, '저챗')] };
+    mount(data, KST('2026-10-02 21:00:00'));
+    expect($('#today .detail').innerHTML).toBe('20:00 시작 · 저챗<br>6일 휴방 후 첫 방송이에요.');
+  });
+
+  it('어제도 방송했으면(연속 방송) 휴방 문구가 없다', () => {
+    const data = { ...DATA, live: true, liveCheckedAt: at('2026-10-02 20:59:00'), streams: [st('2026-10-01 10:00:00', '2026-10-01 12:00:00'), st('2026-10-02 20:00:00', null, '저챗')] };
+    mount(data, KST('2026-10-02 21:00:00'));
+    expect($('#today .detail').textContent).toBe('20:00 시작 · 저챗');
+  });
 });
 
 describe('오늘 카드: 자정을 넘긴 방송·수집 지연', () => {
@@ -88,7 +100,7 @@ describe('오늘 카드: 자정을 넘긴 방송·수집 지연', () => {
   it('어제 시작해 자정을 넘긴 방송도 방송 중으로 보인다 (오늘 첫 수집 후)', () => {
     mount({ ...overnight, liveCheckedAt: at('2026-10-03 00:59:00'), checkedDays: ['2026-10-02', '2026-10-03'] }, KST('2026-10-03 01:00:00'));
     expect($('#today .verdict').textContent).toBe('방송 중');
-    expect($('#today .detail').textContent).toBe('어제 23:00 시작 · 심야');
+    expect($('#today .detail').textContent).toBe('어제 23:00 시작 · 심야1일 이상 휴방 후 첫 방송이에요.');
     expect($('#today .stale')).toBeNull();
     expect(day('2026-10-02').className).toContain('on'); // 달력은 시작일 기준 그대로
   });
@@ -100,7 +112,7 @@ describe('오늘 카드: 자정을 넘긴 방송·수집 지연', () => {
 
   it('이틀 이상 이어진 방송은 날짜를 함께 보여준다', () => {
     mount({ ...overnight, liveCheckedAt: at('2026-10-04 09:59:00'), checkedDays: ['2026-10-02', '2026-10-03', '2026-10-04'] }, KST('2026-10-04 10:00:00'));
-    expect($('#today .detail').textContent).toBe('10/2 23:00 시작 · 심야');
+    expect($('#today .detail').textContent).toBe('10/2 23:00 시작 · 심야1일 이상 휴방 후 첫 방송이에요.');
   });
 
   it('라이브 확인 후 정확히 10분까지는 믿고, 그 뒤로는 방송 중으로 보이지 않고 안내한다', () => {
@@ -168,6 +180,13 @@ describe('접근성', () => {
     mount({ ...DATA, streams: [st('2026-10-01 20:00:00', null)] }, KST('2026-10-03 13:00:00'));
     expect(day('2026-10-01').textContent).toBe('1방송');
     expect(day('2026-10-01').getAttribute('aria-label')).toBe('10월 1일 방송');
+  });
+
+  it('휴방 뒤 첫 방송한 칸의 aria-label은 그대로다 (문구는 상세에서 읽어 준다)', () => {
+    const data = { ...DATA, since: '2026-09-24', streams: [...DATA.streams, st('2026-10-02 09:00:00', '2026-10-02 10:30:00')] };
+    mount(data, KST('2026-10-03 12:00:00'));
+    expect(day('2026-10-02').getAttribute('aria-label')).toBe('10월 2일 방송 1시간 30분, 09:00~10:30');
+    expect($('#info').getAttribute('aria-live')).toBe('polite');
   });
 
   it('데이터를 불러오기 전에는 월 이동 버튼이 비활성이다', () => {
@@ -273,7 +292,7 @@ describe('달력', () => {
     for (const data of cases) {
       const state = mount(data, KST('2026-10-02 21:30:00'));
       expect($('#today .verdict').textContent).toBe('방송함');
-      expect($('#today .detail').innerHTML).toBe('20:00~확인 중 · A');
+      expect($('#today .detail').innerHTML).toBe('20:00~확인 중 · A<br>1일 이상 휴방 후 첫 방송이에요.');
       select(document, state, '2026-10-02');
       expect($('#info li b').textContent).toBe('20:00 ~ 종료 시각 확인 중');
       expect($('#info li .muted').innerHTML).toBe('20:00~21:00 a<br>21:00~확인 중 b');
@@ -286,18 +305,18 @@ describe('달력', () => {
       streams: [{ ...st('2026-10-02 20:00:00', null, 'A'), ended: true }, st('2026-10-02 20:15:00', null, 'B')],
     };
     const state = mount(data, KST('2026-10-02 21:30:00'));
-    expect($('#today .detail').textContent).toBe('20:15 시작 · B');
+    expect($('#today .detail').textContent).toBe('20:15 시작 · B1일 이상 휴방 후 첫 방송이에요.');
     select(document, state, '2026-10-02');
     expect([...document.querySelectorAll('#info li')].map((e) => e.textContent)).toEqual(['20:00 ~ 종료 시각 확인 중A', '20:15 ~ 방송 중B']);
     // 방송이 끝나 live가 꺼진 뒤 오늘 카드
     mount({ ...data, live: false, streams: [data.streams[0], st('2026-10-02 20:15:00', '2026-10-02 23:00:00', 'B')] }, KST('2026-10-02 23:30:00'));
-    expect($('#today .detail').innerHTML).toBe('20:00~확인 중 · A<br>20:15~23:00 · B');
+    expect($('#today .detail').innerHTML).toBe('20:00~확인 중 · A<br>20:15~23:00 · B<br>1일 이상 휴방 후 첫 방송이에요.');
   });
 
   it('종료를 놓쳐 마지막으로 본 시각으로 추정한 종료 시각에는 \'약\'을 붙인다', () => {
     const data = { ...DATA, streams: [{ ...st('2026-10-02 20:00:00', '2026-10-02 20:09:00', 'A'), closeApprox: true }, st('2026-10-02 20:15:00', '2026-10-02 23:00:00', 'B')] };
     const state = mount(data, KST('2026-10-02 23:30:00'));
-    expect($('#today .detail').innerHTML).toBe('20:00~약 20:09 · A<br>20:15~23:00 · B');
+    expect($('#today .detail').innerHTML).toBe('20:00~약 20:09 · A<br>20:15~23:00 · B<br>1일 이상 휴방 후 첫 방송이에요.');
     select(document, state, '2026-10-02');
     expect($('#info li').textContent).toBe('20:00 ~ 약 20:09 · 약 9분A');
   });
@@ -343,6 +362,30 @@ describe('달력', () => {
     select(document, state, '2026-10-01');
     expect([...document.querySelectorAll('#info li')].map((e) => e.textContent)).toEqual(['10:00 ~ 12:00 · 2시간아침', '23:00 ~ 02:10 · 3시간 10분심야']);
     expect($('#info > .muted').textContent).toBe('총 5시간 10분');
+  });
+
+  it('휴방 뒤 첫 방송한 날 상세에 며칠 휴방했는지 날짜 바로 아래 보여 준다', () => {
+    const data = { ...DATA, since: '2026-09-24', streams: [...DATA.streams, st('2026-10-02 08:49:35', '2026-10-02 15:24:35', '포더킹2', '포 더 킹 2')] };
+    const state = mount(data, KST('2026-10-03 12:00:00'));
+    select(document, state, '2026-10-02');
+    expect($('#info').innerHTML).toBe('<b>2026-10-02 (금)</b><div class="muted">6일 휴방 후 첫 방송</div><ul><li><b>08:49 ~ 15:24</b> · 6시간 35분<br>포더킹2 <span class="muted">(포 더 킹 2)</span></li></ul>');
+  });
+
+  it('기록 시작 전까지 휴방이 이어졌으면 \'이상\'으로 말한다', () => {
+    const data = { ...DATA, checkedDays: [], streams: [st('2026-10-03 10:00:00', '2026-10-03 12:00:00')] };
+    const state = mount(data, KST('2026-10-04 12:00:00'));
+    select(document, state, '2026-10-03');
+    expect($('#info').innerHTML).toMatch(/^<b>2026-10-03 \(토\)<\/b><div class="muted">2일 이상 휴방 후 첫 방송<\/div><ul>/);
+  });
+
+  it('연속 방송일·휴방일·오늘 미정·확인 전·기록 없음 상세에는 휴방 문구가 없다', () => {
+    const data = { ...DATA, streams: [...DATA.streams, st('2026-10-02 10:00:00', '2026-10-02 12:00:00'), st('2026-10-03 10:00:00', '2026-10-03 12:00:00')] };
+    const state = mount(data, KST('2026-10-06 12:00:00'));
+    // 10/3 연속 방송, 10/1 휴방, 10/4 확인 전, 10/6 오늘 미정, 9/24 기록 없음
+    for (const d of ['2026-10-03', '2026-10-01', '2026-10-04', '2026-10-06', '2026-09-24']) {
+      select(document, state, d);
+      expect($('#info').textContent).not.toContain('휴방 후');
+    }
   });
 
   it('상세 칸은 바뀌면 스크린 리더가 읽어 준다', () => {
@@ -415,6 +458,17 @@ describe('마우스 툴팁', () => {
     hover(day('2026-09-25'));
     $('#grid').dispatchEvent(new MouseEvent('pointerleave'));
     expect($('#tip').hidden).toBe(true);
+  });
+
+  it('휴방 뒤 첫 방송한 날 툴팁도 정보 칸과 같은 상세를 보여 준다', () => {
+    const data = { ...DATA, since: '2026-09-24', streams: [...DATA.streams, st('2026-10-02 09:00:00', '2026-10-02 10:30:00')] };
+    const state = mount(data, KST('2026-10-03 12:00:00'));
+    bindHover(document, state);
+    hover(day('2026-10-02'));
+    expect($('#tip').textContent).toContain('6일 휴방 후 첫 방송');
+    const tip = $('#tip').innerHTML;
+    select(document, state, '2026-10-02');
+    expect($('#info').innerHTML).toBe(tip);
   });
 
   it('터치는 툴팁 없이 누르기로만 본다', () => {

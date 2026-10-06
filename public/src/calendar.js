@@ -117,6 +117,23 @@ export function currentStreak(ctx) {
   return { streak, streakKind: kind };
 }
 
+// 방송한 날 d 직전에 이어진 휴방 일수. currentStreak와 같은 규칙으로 'off'인 날만 거슬러 세고 'on'을 만나면 닫힌다.
+// 기록 시작 전(nodata)·확인 전(unknown) 날에 닿으면 그 앞은 모르므로 하한(atLeast)만 말한다
+// (그 날이 실제로 방송이었으면 정확히 days, 휴방이었으면 days+1 이상이라 어느 쪽이든 참값 ≥ days).
+// d가 방송한 날이 아니거나 바로 전날이 휴방이 아니면(연속 방송, 전날이 바로 확인 전·기록 없음) null
+export function offStreakBefore(d, ctx) {
+  if (dayStatus(d, ctx) !== 'on') return null;
+  let days = 0;
+  let p = addDays(d, -1);
+  while (dayStatus(p, ctx) === 'off') {
+    days++;
+    p = addDays(p, -1);
+  }
+  if (!days) return null;
+  const stop = dayStatus(p, ctx);
+  return { days, atLeast: stop === 'unknown' || stop === 'nodata' };
+}
+
 // 달력에서 이동 가능한 첫 달: 기록 시작일과 가장 오래된 방송 중 더 이른 쪽
 export function firstMonth(data) {
   const first = data.streams[0]?.openDate ?? data.since;
