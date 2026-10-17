@@ -119,8 +119,15 @@ describe('watchSteam', () => {
     expect(r).toMatchObject({ steamHours: 7, streamedHours: 6, offStream: false });
   });
 
-  it('방송이 없는데 새 게임이 보이면 방송 밖 플레이다 (방송 기록이 없어도)', async () => {
+  it('방송 기록이 없으면 저장하지 않고 throw해 다음에 다시 찍는다', async () => {
     const DB = fakeDb({ snapshots: [PREV] });
+    const xml = profileXml([game('TEKKEN 8', '137')]);
+    await expect(watchSteam({ DB }, { fetchImpl: xmlResponse(xml), now: NOW, ...quiet })).rejects.toThrow('방송 기록이 없어');
+    expect(DB.rows.has('2026-10-17')).toBe(false);
+  });
+
+  it('방송이 없는데 새 게임이 보이면 방송 밖 플레이다', async () => {
+    const DB = fakeDb({ snapshots: [PREV], streams: [] });
     const xml = profileXml([game('TEKKEN 8', '130'), game('Project Zomboid', '1,840'), game('For The King II', '16.4')]);
     const r = await watchSteam({ DB }, { fetchImpl: xmlResponse(xml), now: NOW, ...quiet });
     expect(r).toMatchObject({ played: {}, firstSeen: ['For The King II'], streamedHours: 0, offStream: true });
@@ -139,7 +146,7 @@ describe('watchSteam', () => {
   });
 
   it('그 사이 다른 실행이 먼저 찍었으면 비교하지 않는다', async () => {
-    const DB = fakeDb();
+    const DB = fakeDb({ streams: [] });
     const fetchImpl = vi.fn(async () => {
       DB.rows.set('2026-10-17', PREV);
       return new Response(profileXml([]));

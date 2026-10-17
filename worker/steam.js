@@ -64,6 +64,20 @@ export async function watchSteam(env, { fetchImpl = fetch, now = Date.now(), log
 
   const takenAt = new Date(now).toISOString();
   const prev = await env.DB.prepare('SELECT taken_at, games FROM steam_snapshots ORDER BY date DESC LIMIT 1').first();
+  // 비교에 필요한 걸 다 읽은 뒤에 저장한다. 먼저 저장하면 비교가 실패해도 오늘은 찍은 것으로 보여 재시도가 막힌다
+  let result = { date, games: profile.games };
+  if (prev) {
+    const doc = await loadDoc(env.DB);
+    // 방송 기록이 없으면 방송 0시간으로 잘못 판정하므로 찍지 않는다 (collect와 같은 이유로 시드가 먼저다)
+    if (!doc) throw new Error('D1에 방송 기록이 없어 Steam 플레이 시간을 비교할 수 없습니다');
+    // 실패한 날이 있으면 구간이 하루보다 길어지므로 어제가 아니라 직전 스냅샷 시각부터 센다
+    const { played, firstSeen } = diffGames(JSON.parse(prev.games), profile.games);
+    const streamed = round1(streamedHours(doc.data.streams, Date.parse(prev.taken_at), now));
+    const steamHours = round1(Object.values(played).reduce((a, b) => a + b, 0));
+    const offStream = steamHours > streamed + SLACK_HOURS || (firstSeen.length > 0 && streamed === 0);
+    result = { date, from: prev.taken_at, to: takenAt, played, firstSeen, steamHours, streamedHours: streamed, offStream };
+  }
+
   const inserted = await env.DB.prepare('INSERT OR IGNORE INTO steam_snapshots (date, taken_at, games) VALUES (?, ?, ?)')
     .bind(date, takenAt, JSON.stringify(profile.games))
     .run();
@@ -71,17 +85,9 @@ export async function watchSteam(env, { fetchImpl = fetch, now = Date.now(), log
   if (inserted.meta.changes !== 1) return null;
   if (!prev) {
     log(JSON.stringify({ message: 'Steam 첫 스냅샷', date, games: profile.games }));
-    return { date, games: profile.games };
+    return result;
   }
-
-  // 실패한 날이 있으면 구간이 하루보다 길어지므로 어제가 아니라 직전 스냅샷 시각부터 센다
-  const { played, firstSeen } = diffGames(JSON.parse(prev.games), profile.games);
-  const doc = await loadDoc(env.DB);
-  const streamed = round1(streamedHours(doc?.data.streams ?? [], Date.parse(prev.taken_at), now));
-  const steamHours = round1(Object.values(played).reduce((a, b) => a + b, 0));
-  const offStream = steamHours > streamed + SLACK_HOURS || (firstSeen.length > 0 && streamed === 0);
-  const result = { date, from: prev.taken_at, to: takenAt, played, firstSeen, steamHours, streamedHours: streamed, offStream };
   // 대시보드에서 "방송 밖 플레이"로 검색할 수 있게 메시지를 나눈다
-  log(JSON.stringify({ message: offStream ? 'Steam 방송 밖 플레이' : 'Steam 스냅샷', ...result, onlineState: profile.onlineState }));
+  log(JSON.stringify({ message: result.offStream ? 'Steam 방송 밖 플레이' : 'Steam 스냅샷', ...result, onlineState: profile.onlineState }));
   return result;
 }
