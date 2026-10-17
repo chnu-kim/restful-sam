@@ -5,7 +5,7 @@ export const DEFAULT_API_URL = `https://api.chzzk.naver.com/polling/v2/channels/
 // 다시보기 보충용
 export const DEFAULT_SERVICE_BASE = 'https://api.chzzk.naver.com/service';
 
-const USER_AGENT =
+export const USER_AGENT =
   'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0 Safari/537.36';
 
 const KST_OFFSET = 9 * 60 * 60 * 1000;
