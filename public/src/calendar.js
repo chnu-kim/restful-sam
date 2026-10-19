@@ -134,6 +134,28 @@ export function offStreakBefore(d, ctx) {
   return { days, atLeast: stop === 'unknown' || stop === 'nodata' };
 }
 
+// 날짜 상세·오늘 카드·링크 카드가 같은 문구를 쓴다. 기록 시작 전·확인 전에 닿아 정확히 모르면 '이상'
+export const offStreakText = (r) => `${r.days}일${r.atLeast ? ' 이상' : ''} 휴방 후 첫 방송`;
+
+// 1분마다 수집 + 지연 여유
+export const LIVE_FRESH_MS = 10 * 60 * 1000;
+
+// 수집이 멈춰 live가 남아 있을 수 있으니 최근(10분 이내)에 방송 중으로 확인된 경우만 믿는다
+export const liveFresh = (data, now) => now - Date.parse(data.liveCheckedAt ?? '') <= LIVE_FRESH_MS;
+
+// 자정을 넘긴 방송은 시작일(어제)에 속하므로 오늘 목록이 아니라 전체에서 열린 방송을 찾는다
+export function liveStream(data, now) {
+  if (!data.live || !liveFresh(data, now)) return null;
+  return data.streams.findLast((s) => !s.closeDate && !s.ended) ?? null;
+}
+
+export function startedAt(openDate, today) {
+  const d = openDate.slice(0, 10);
+  if (d === today) return hm(openDate);
+  if (d === addDays(today, -1)) return `어제 ${hm(openDate)}`;
+  return `${Number(d.slice(5, 7))}/${Number(d.slice(8))} ${hm(openDate)}`;
+}
+
 // 달력에서 이동 가능한 첫 달: 기록 시작일과 가장 오래된 방송 중 더 이른 쪽
 export function firstMonth(data) {
   const first = data.streams[0]?.openDate ?? data.since;

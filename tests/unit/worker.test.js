@@ -152,7 +152,7 @@ describe('Worker 핸들러', () => {
 
   it('그 외 경로는 정적 자산으로 넘긴다', async () => {
     const ASSETS = { fetch: vi.fn(async () => new Response('page')) };
-    const req = new Request('https://x/');
+    const req = new Request('https://x/favicon.svg');
     const res = await worker.fetch(req, { ASSETS });
     expect(ASSETS.fetch).toHaveBeenCalledWith(req);
     expect(await res.text()).toBe('page');

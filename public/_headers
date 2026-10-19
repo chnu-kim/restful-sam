@@ -1,5 +1,5 @@
 # Cloudflare Workers Static Assets가 정적 응답에 붙이는 헤더 (이 파일 자체는 서빙되지 않는다).
-# Worker가 먼저 처리하는 /data/*에는 붙지 않아 worker/index.js에서 따로 단다.
+# Worker가 먼저 처리하는 /data/*, /에는 붙지 않아 worker/index.js·worker/page.js에서 따로 단다 (page.js의 PAGE_HEADERS는 아래 /* 규칙과 같아야 한다).
 # script-src의 해시는 index.html 인라인 스크립트 2개(테마 초기화, 부트 모듈)의 것이다. 스크립트를 고치면 해시도 바꿔야 하며, tests/unit/headers.test.js가 어긋남을 잡는다.
 # style-src의 'unsafe-inline'은 인라인 <style>과 style 속성(달력 칸의 --fill 등) 때문이다.
 /*
