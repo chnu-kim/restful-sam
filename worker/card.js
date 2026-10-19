@@ -135,8 +135,12 @@ export async function cardKey(html) {
 const PNG_SIGNATURE = [0x89, 0x50, 0x4e, 0x47];
 const isPng = (buf) => PNG_SIGNATURE.every((b, i) => new Uint8Array(buf, 0, 4)[i] === b);
 
+// 최근 몇 장까지 남길지. 카드는 하루 몇 번 바뀌므로 하루치 남짓이다
+export const KEEP_CARDS = 10;
+
+// 가장 최근에 찍은 카드의 key
 export async function storedCardKey(db) {
-  return (await db.prepare('SELECT key FROM og_card WHERE id = 1').first())?.key ?? null;
+  return (await db.prepare('SELECT key FROM og_cards ORDER BY rendered_at DESC LIMIT 1').first())?.key ?? null;
 }
 
 // 카드가 바뀌었으면 다시 찍어 저장한다. 찍었으면 새 key, 아니면 null. data를 받으면 D1을 다시 읽지 않는다
@@ -158,11 +162,9 @@ export async function updateCard(env, { now = Date.now(), data, log = console.lo
   if (!res.ok) throw new Error(`카드 스크린샷 HTTP ${res.status}: ${(await res.text()).slice(0, 300)}`);
   const png = await res.arrayBuffer();
   if (png.byteLength < 8 || !isPng(png)) throw new Error(`카드 스크린샷이 PNG가 아닙니다 (${png.byteLength}바이트)`);
-  await env.DB.prepare(
-    'INSERT INTO og_card (id, key, png, rendered_at) VALUES (1, ?, ?, ?) ON CONFLICT (id) DO UPDATE SET key = excluded.key, png = excluded.png, rendered_at = excluded.rendered_at',
-  )
-    .bind(key, png, new Date(now).toISOString())
-    .run();
+  // 예전과 같은 카드로 돌아왔으면 그 줄을 최신으로 바꾼다
+  await env.DB.prepare('INSERT OR REPLACE INTO og_cards (key, png, rendered_at) VALUES (?, ?, ?)').bind(key, png, new Date(now).toISOString()).run();
+  await env.DB.prepare('DELETE FROM og_cards WHERE key NOT IN (SELECT key FROM og_cards ORDER BY rendered_at DESC LIMIT ?)').bind(KEEP_CARDS).run();
   log(JSON.stringify({ message: '링크 카드 갱신', key, bytes: png.byteLength }));
   return key;
 }

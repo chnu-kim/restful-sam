@@ -63,11 +63,18 @@ export async function servePage(request, env, now = Date.now()) {
   });
 }
 
-export async function serveCardImage(env) {
-  const row = await env.DB.prepare('SELECT png FROM og_card WHERE id = 1').first();
+// ?k=에 맞는 카드를 준다. 페이지를 읽은 뒤 카드가 바뀌어도 그 페이지가 가리킨 카드가 나가야 제목과 이미지가 어긋나지 않는다.
+// 오래돼 지워졌거나 k가 없으면 최신 카드를 준다
+export async function serveCardImage(env, key = null) {
+  const exact = key && (await env.DB.prepare('SELECT png FROM og_cards WHERE key = ?').bind(key).first());
+  const row = exact || (await env.DB.prepare('SELECT png FROM og_cards ORDER BY rendered_at DESC LIMIT 1').first());
   if (!row) return new Response('no card', { status: 404, headers: { 'X-Content-Type-Options': 'nosniff' } });
-  // ?k=로 주소가 바뀌므로 잠깐은 캐시해도 된다
+  // key가 맞으면 내용이 바뀌지 않으므로 오래 캐시하고, 최신 카드로 대신 줬으면 잠깐만 캐시한다
   return new Response(new Uint8Array(row.png), {
-    headers: { 'Content-Type': 'image/png', 'Cache-Control': 'public, max-age=300', 'X-Content-Type-Options': 'nosniff' },
+    headers: {
+      'Content-Type': 'image/png',
+      'Cache-Control': exact ? 'public, max-age=86400, immutable' : 'public, max-age=300',
+      'X-Content-Type-Options': 'nosniff',
+    },
   });
 }

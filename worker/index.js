@@ -15,13 +15,13 @@ const json = (body, status = 200) =>
 
 export default {
   async fetch(request, env) {
-    const { pathname } = new URL(request.url);
+    const { pathname, searchParams } = new URL(request.url);
     if (pathname === '/data/streams.json') {
       const doc = await loadDoc(env.DB);
       return doc ? json(doc.raw) : json('{"error":"no data"}', 404);
     }
     if (pathname === '/' && request.method === 'GET') return servePage(request, env);
-    if (pathname === '/og.png') return serveCardImage(env);
+    if (pathname === '/og.png') return serveCardImage(env, searchParams.get('k'));
     return env.ASSETS.fetch(request);
   },
 
