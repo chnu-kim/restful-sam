@@ -18,8 +18,9 @@
 치지직 live-status ──────────▶ Cloudflare Worker ──▶ D1 (방송 기록 문서)
 치지직 다시보기 (10분마다, 보조) ─┘        │
                                           ├─ /data/streams.json  ◀── 페이지가 읽음 (D1 최신 기록, 캐시 없음)
-                                          ├─ / (정적 페이지 + 링크 카드 메타)
-                                          └─ /og.png (링크 카드 이미지, 바뀔 때만 Browser Run으로 찍어 D1에 저장)
+                                          ├─ / (정적 페이지 + 링크 카드 메타·canonical)
+                                          ├─ /og.png (링크 카드 이미지, 바뀔 때만 Browser Run으로 찍어 D1에 저장)
+                                          └─ /sitemap.xml (/ 하나만 싣는다)
 
 GitHub Actions (매일 00:17 KST): D1 기록 ──▶ data/streams.json 커밋 (백업)
 ```
