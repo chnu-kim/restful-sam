@@ -30,6 +30,7 @@ async function cardMeta(env, now) {
 export function metaTags(meta, origin, { themeColor = false } = {}) {
   const tag = (attr, name, content) => `<meta ${attr}="${name}" content="${esc(content)}">`;
   return [
+    `<link rel="canonical" href="${esc(origin)}/">`,
     meta.description && tag('name', 'description', meta.description),
     tag('property', 'og:type', 'website'),
     tag('property', 'og:site_name', SITE_NAME),
@@ -60,6 +61,18 @@ export async function servePage(request, env, now = Date.now()) {
   const html = (await asset.text()).replace('</head>', `${metaTags(meta, url.origin, { themeColor: isDiscordBot(request.headers.get('User-Agent')) })}\n</head>`);
   return new Response(html, {
     headers: { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store', ...PAGE_HEADERS },
+  });
+}
+
+// 페이지가 / 하나뿐이라 sitemap에도 그 주소만 싣는다. 주소는 canonical·og:url처럼 요청이 들어온 origin으로 만든다
+export function serveSitemap(origin) {
+  const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  <url><loc>${esc(origin)}/</loc></url>
+</urlset>
+`;
+  return new Response(xml, {
+    headers: { 'Content-Type': 'application/xml; charset=utf-8', 'Cache-Control': 'public, max-age=86400', 'X-Content-Type-Options': 'nosniff' },
   });
 }
 

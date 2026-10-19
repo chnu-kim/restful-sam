@@ -160,6 +160,7 @@ describe('servePage', () => {
     expect(html).toContain('<meta property="og:description" content="마지막 방송 9월 25일 (금) · 10월 방송 0일, 휴방 18일">');
     expect(html).toContain('<meta property="og:image" content="https://site.dev/og.png?k=abc123">');
     expect(html).toContain('<meta name="twitter:card" content="summary_large_image">');
+    expect(html).toContain('<link rel="canonical" href="https://site.dev/">');
     expect(html).not.toContain('theme-color');
     expect(html.indexOf('og:title')).toBeLessThan(html.indexOf('</head>'));
     for (const [name, value] of Object.entries(PAGE_HEADERS)) expect(res.headers.get(name)).toBe(value);
@@ -226,6 +227,15 @@ describe('Worker 라우팅', () => {
     const img = await worker.fetch(new Request('https://site.dev/og.png?k=k'), env);
     expect(img.headers.get('Content-Type')).toBe('image/png');
     expect(img.headers.get('Cache-Control')).toContain('immutable');
+  });
+
+  it('/sitemap.xml은 요청 origin의 / 하나만 싣는다', async () => {
+    const res = await worker.fetch(new Request('https://site.dev/sitemap.xml'), {});
+    expect(res.headers.get('Content-Type')).toBe('application/xml; charset=utf-8');
+    const xml = await res.text();
+    expect(xml).toContain('<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">');
+    expect(xml.match(/<loc>/g)).toHaveLength(1);
+    expect(xml).toContain('<loc>https://site.dev/</loc>');
   });
 
   it('예약 실행은 수집이 실패해도 저장된 기록으로 카드를 갱신한다', async () => {
