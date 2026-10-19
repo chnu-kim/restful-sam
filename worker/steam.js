@@ -72,9 +72,12 @@ export async function watchSteam(env, { fetchImpl = fetch, now = Date.now(), log
     if (!doc) throw new Error('D1에 방송 기록이 없어 Steam 플레이 시간을 비교할 수 없습니다');
     // 실패한 날이 있으면 구간이 하루보다 길어지므로 어제가 아니라 직전 스냅샷 시각부터 센다
     const { played, firstSeen } = diffGames(JSON.parse(prev.games), profile.games);
-    const streamed = round1(streamedHours(doc.data.streams, Date.parse(prev.taken_at), now));
+    const rawStreamed = streamedHours(doc.data.streams, Date.parse(prev.taken_at), now);
+    const streamed = round1(rawStreamed);
     const steamHours = round1(Object.values(played).reduce((a, b) => a + b, 0));
-    const offStream = steamHours > streamed + SLACK_HOURS || (firstSeen.length > 0 && streamed === 0);
+    // 방송이 없었으면 여유를 둘 이유가 없다. 100시간 넘는 게임은 +1이 최소 단위라 여유를 두면 1시간 플레이를 놓친다
+    // 몇 분만 걸친 방송도 반올림하면 0이 되므로 방송이 있었는지는 반올림 전 값으로 본다
+    const offStream = steamHours > streamed + SLACK_HOURS || (rawStreamed === 0 && (steamHours > 0 || firstSeen.length > 0));
     result = { date, from: prev.taken_at, to: takenAt, played, firstSeen, steamHours, streamedHours: streamed, offStream };
   }
 
