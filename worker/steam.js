@@ -74,7 +74,8 @@ export async function watchSteam(env, { fetchImpl = fetch, now = Date.now(), log
     const { played, firstSeen } = diffGames(JSON.parse(prev.games), profile.games);
     const streamed = round1(streamedHours(doc.data.streams, Date.parse(prev.taken_at), now));
     const steamHours = round1(Object.values(played).reduce((a, b) => a + b, 0));
-    const offStream = steamHours > streamed + SLACK_HOURS || (firstSeen.length > 0 && streamed === 0);
+    // 방송이 없었으면 여유를 둘 이유가 없다. 100시간 넘는 게임은 +1이 최소 단위라 여유를 두면 1시간 플레이를 놓친다
+    const offStream = steamHours > streamed + SLACK_HOURS || (streamed === 0 && (steamHours > 0 || firstSeen.length > 0));
     result = { date, from: prev.taken_at, to: takenAt, played, firstSeen, steamHours, streamedHours: streamed, offStream };
   }
 

@@ -133,6 +133,13 @@ describe('watchSteam', () => {
     expect(r).toMatchObject({ played: {}, firstSeen: ['For The King II'], streamedHours: 0, offStream: true });
   });
 
+  it('방송이 없는데 1시간이라도 늘었으면 방송 밖 플레이다', async () => {
+    const DB = fakeDb({ snapshots: [PREV], streams: [] });
+    const xml = profileXml([game('TEKKEN 8', '131'), game('Project Zomboid', '1,840')]);
+    const r = await watchSteam({ DB }, { fetchImpl: xmlResponse(xml), now: NOW, ...quiet });
+    expect(r).toMatchObject({ played: { 'TEKKEN 8': 1 }, steamHours: 1, streamedHours: 0, offStream: true });
+  });
+
   it('비공개면 찍지 않고 경고만 남긴다', async () => {
     const DB = fakeDb();
     const warn = vi.fn();
