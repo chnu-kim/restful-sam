@@ -1,13 +1,11 @@
 // 페이지 렌더링. 상태는 state 객체 하나로 들고, DOM은 root(document)에서 찾는다.
 import {
-  DOW, addDays, addMonths, computeStats, dayOfWeek, dayMinutes, dayStatus, dayTimeRange, durationLong, esc, fillPercent, firstMonth, hm, makeContext, monthDays, monthLabel,
-  offStreakBefore, streamMinutes, todayKst,
+  DOW, addDays, addMonths, computeStats, dayOfWeek, dayMinutes, dayStatus, dayTimeRange, durationLong, esc, fillPercent, firstMonth, hm, liveFresh, liveStream,
+  makeContext, monthDays, monthLabel, offStreakBefore, offStreakText, startedAt, streamMinutes, todayKst,
 } from './calendar.js';
 
 const MARKS = { on: '방송', off: '휴방', pending: '?', unknown: '미확인', nodata: '', future: '' };
 const LABELS = { on: '방송', off: '휴방', pending: '아직 방송 전', unknown: '확인 전', nodata: '기록 없음', future: '' };
-// 날짜 상세와 오늘 카드가 같은 문구를 쓴다. 기록 시작 전·확인 전에 닿아 정확히 모르면 '이상'
-const offStreakText = (r) => `${r.days}일${r.atLeast ? ' 이상' : ''} 휴방 후 첫 방송`;
 
 export function createState(data, now = Date.now()) {
   const today = todayKst(now);
@@ -17,27 +15,11 @@ export function createState(data, now = Date.now()) {
 
 const ctx = (state) => state.ctx;
 
-// 1분마다 수집 + 지연 여유
-export const LIVE_FRESH_MS = 10 * 60 * 1000;
-
-// 자정을 넘긴 방송은 시작일(어제)에 속하므로 오늘 목록이 아니라 전체에서 열린 방송을 찾는다.
-// 수집이 멈춰 live가 남아 있을 수 있으니 최근(10분 이내)에 방송 중으로 확인된 경우만 믿는다
-const isLiveFresh = (state) => state.now - Date.parse(state.data.liveCheckedAt ?? '') <= LIVE_FRESH_MS;
-
-function findLiveStream(state) {
-  if (!state.data.live || !isLiveFresh(state)) return null;
-  return state.data.streams.findLast((s) => !s.closeDate && !s.ended) ?? null;
-}
+const isLiveFresh = (state) => liveFresh(state.data, state.now);
+const findLiveStream = (state) => liveStream(state.data, state.now);
 
 // 종료를 놓쳐 마지막으로 본 시각으로 추정한 종료 시각에는 '약'을 붙인다
 const approx = (s) => (s.closeApprox ? '약 ' : '');
-
-function startedAt(openDate, today) {
-  const d = openDate.slice(0, 10);
-  if (d === today) return hm(openDate);
-  if (d === addDays(today, -1)) return `어제 ${hm(openDate)}`;
-  return `${Number(d.slice(5, 7))}/${Number(d.slice(8))} ${hm(openDate)}`;
-}
 
 function staleNotice(state) {
   if (state.data.live && !isLiveFresh(state)) {

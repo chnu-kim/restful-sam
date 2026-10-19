@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
+import { PAGE_HEADERS } from '../../worker/page.js';
 
 const read = (p) => readFileSync(join(import.meta.dirname, '../../public', p), 'utf8');
 const HTML = read('index.html');
@@ -26,5 +27,11 @@ describe('public/_headers', () => {
     expect(HEADERS).toMatch(/^\s+Referrer-Policy: no-referrer$/m);
     expect(directive('frame-ancestors')).toEqual(["'none'"]);
     expect(directive('object-src')).toEqual(["'none'"]);
+  });
+
+  // Worker가 직접 내보내는 첫 페이지(/)에는 _headers가 붙지 않아 같은 값을 코드에 두므로, 둘이 어긋나지 않게 한다
+  it('Worker가 내보내는 페이지 헤더가 _headers의 /* 규칙과 같다', () => {
+    const rule = Object.fromEntries([...HEADERS.matchAll(/^\s+([\w-]+):\s*(.+)$/gm)].map(([, name, value]) => [name, value.trim()]));
+    expect(PAGE_HEADERS).toEqual(rule);
   });
 });

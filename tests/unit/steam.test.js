@@ -163,8 +163,9 @@ describe('Worker 예약 실행', () => {
     const waits = [];
     await worker.scheduled({ scheduledTime: NOW }, { DB }, { waitUntil: (p) => waits.push(p) });
     await expect(waits[0]).rejects.toThrow();
-    await expect(waits[1]).resolves.toBeUndefined();
-    expect(JSON.parse(warn.mock.calls.at(-1)[0])).toEqual({ message: 'Steam 감시 실패', error: 'D1 끊김' });
+    // waits[1]은 링크 카드, waits[2]가 Steam 감시
+    await expect(waits[2]).resolves.toBeUndefined();
+    expect(warn.mock.calls.map(([m]) => JSON.parse(m))).toContainEqual({ message: 'Steam 감시 실패', error: 'D1 끊김' });
     fetchSpy.mockRestore();
     warn.mockRestore();
   });
