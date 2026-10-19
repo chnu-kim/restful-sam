@@ -140,6 +140,13 @@ describe('watchSteam', () => {
     expect(r).toMatchObject({ played: { 'TEKKEN 8': 1 }, steamHours: 1, streamedHours: 0, offStream: true });
   });
 
+  it('몇 분만 걸친 방송도 방송이 있었던 것으로 보고 여유를 둔다', async () => {
+    const DB = fakeDb({ snapshots: [PREV], streams: [{ openDate: '2026-10-16 23:58:00', closeDate: '2026-10-17 01:00:00' }] });
+    const xml = profileXml([game('TEKKEN 8', '131'), game('Project Zomboid', '1,840')]);
+    const r = await watchSteam({ DB }, { fetchImpl: xmlResponse(xml), now: NOW, ...quiet });
+    expect(r).toMatchObject({ steamHours: 1, streamedHours: 0, offStream: false });
+  });
+
   it('비공개면 찍지 않고 경고만 남긴다', async () => {
     const DB = fakeDb();
     const warn = vi.fn();
