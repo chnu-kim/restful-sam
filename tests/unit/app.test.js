@@ -2,7 +2,7 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { bindHover, bindTheme, createState, init, renderAll, renderError, select, shiftMonth } from '../../public/src/app.js';
+import { bindHover, bindSummary, bindTheme, createState, init, openSummary, renderAll, renderError, saveSummary, select, shiftMonth } from '../../public/src/app.js';
 
 // 실제 index.html의 마크업을 그대로 써서 id가 어긋나면 테스트가 깨지게 한다
 const MAIN = readFileSync(join(import.meta.dirname, '../../public/index.html'), 'utf8').match(/<main>[\s\S]*<\/main>/)[0];
@@ -533,6 +533,100 @@ describe('init', () => {
     expect(spy).toHaveBeenCalled();
     expect(state.today).toMatch(/^\d{4}-\d{2}-\d{2}$/);
     vi.restoreAllMocks();
+  });
+});
+
+describe('전체 요약', () => {
+  // jsdom에는 모달·캔버스가 없어 필요한 만큼만 흉내 낸다
+  const fakeWindow = ({ coarse = false, share } = {}) => ({
+    location: { host: 'example.com' },
+    getComputedStyle: () => ({ getPropertyValue: () => '#000' }),
+    matchMedia: () => ({ matches: coarse }),
+    navigator: share ? { canShare: () => true, share } : {},
+    File,
+    URL: { createObjectURL: vi.fn(() => 'blob:x'), revokeObjectURL: vi.fn() },
+    setTimeout: (fn) => fn(),
+  });
+  const g = new Proxy({}, { get: (t, k) => (k === 'measureText' ? () => ({ width: 10 }) : () => {}), set: () => true });
+
+  beforeEach(() => {
+    const dialog = $('#summary');
+    dialog.showModal = vi.fn(() => { dialog.open = true; });
+    dialog.close = vi.fn(() => { dialog.open = false; });
+    const canvas = $('#summary-canvas');
+    canvas.getContext = () => g;
+    canvas.toBlob = (cb) => cb(new Blob(['png'], { type: 'image/png' }));
+  });
+
+  const opened = async (win = fakeWindow()) => {
+    const state = createState(DATA, KST('2026-10-02 12:00:00'));
+    await openSummary(document, state, win);
+    return state;
+  };
+
+  it('열면 모달을 띄우고 캔버스에 그린 뒤 저장 버튼을 켠다', async () => {
+    await opened();
+    expect($('#summary').showModal).toHaveBeenCalledOnce();
+    expect($('#summary-canvas').width).toBe(1080);
+    expect($('#summary-canvas').getAttribute('aria-label')).toBe('전체 기록 요약: 2026.10.01 ~ 2026.10.02, 방송 0일, 휴방 1일, 휴방률 100%');
+    expect($('#summary-save').disabled).toBe(false);
+    const state = await opened();
+    expect(state.summaryFile.name).toBe('삼덕이-휴방-요약-2026-10-02.png');
+    // 이미 열려 있으면 다시 띄우지 않는다
+    expect($('#summary').showModal).toHaveBeenCalledOnce();
+  });
+
+  it('데스크톱에선 파일로 내려받는다', async () => {
+    const win = fakeWindow();
+    const state = await opened(win);
+    const click = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(function () { this.dataset.clicked = this.download; });
+    await expect(saveSummary(document, state, win)).resolves.toBe('downloaded');
+    expect(click).toHaveBeenCalledOnce();
+    expect(win.URL.revokeObjectURL).toHaveBeenCalledWith('blob:x');
+    click.mockRestore();
+  });
+
+  it('터치 기기에선 공유 시트로 넘기고, 취소하면 그만둔다', async () => {
+    const share = vi.fn(async () => {});
+    const state = await opened();
+    await expect(saveSummary(document, state, fakeWindow({ coarse: true, share }))).resolves.toBe('shared');
+    expect(share.mock.calls[0][0].files[0].name).toBe('삼덕이-휴방-요약-2026-10-02.png');
+    const abort = vi.fn(async () => { throw new DOMException('cancel', 'AbortError'); });
+    await expect(saveSummary(document, state, fakeWindow({ coarse: true, share: abort }))).resolves.toBe('cancelled');
+  });
+
+  it('공유가 막히면 내려받기로 넘어가고, 이미지를 못 만들면 저장 버튼을 끈 채 실패', async () => {
+    const state = await opened();
+    const click = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {});
+    const denied = vi.fn(async () => { throw new DOMException('no', 'NotAllowedError'); });
+    await expect(saveSummary(document, state, fakeWindow({ coarse: true, share: denied }))).resolves.toBe('downloaded');
+    click.mockRestore();
+    $('#summary-canvas').toBlob = (cb) => cb(null);
+    await openSummary(document, state, fakeWindow());
+    expect($('#summary-save').disabled).toBe(true);
+    await expect(saveSummary(document, state, fakeWindow())).resolves.toBe('failed');
+  });
+
+  it('버튼으로 열고 닫으며, 바깥을 누르면 닫힌다', async () => {
+    const state = createState(DATA, KST('2026-10-02 12:00:00'));
+    expect($('#summary-open').disabled).toBe(true);
+    bindSummary(document, state, fakeWindow());
+    expect($('#summary-open').disabled).toBe(false);
+    $('#summary-open').click();
+    await vi.waitFor(() => expect($('#summary-save').disabled).toBe(false));
+    const dialog = $('#summary');
+    dialog.getBoundingClientRect = () => ({ left: 10, right: 100, top: 10, bottom: 100 });
+    // 모달 안쪽 여백 클릭은 닫지 않는다
+    dialog.dispatchEvent(new MouseEvent('click', { clientX: 50, clientY: 50, bubbles: true }));
+    expect(dialog.close).not.toHaveBeenCalled();
+    dialog.dispatchEvent(new MouseEvent('click', { clientX: 5, clientY: 50, bubbles: true }));
+    expect(dialog.close).toHaveBeenCalledOnce();
+    $('#summary-close').click();
+    expect(dialog.close).toHaveBeenCalledTimes(2);
+    const click = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {});
+    $('#summary-save').click();
+    await vi.waitFor(() => expect(click).toHaveBeenCalledOnce());
+    click.mockRestore();
   });
 });
 
