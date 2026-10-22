@@ -184,9 +184,11 @@
   }
   .summary-open svg { width: 18px; height: 18px; }
   .summary-open:disabled { opacity: .5; cursor: default; }
-  /* 요약 모달: 캔버스는 1080px로 그리고 화면 폭에 맞춰 줄인다 */
+  /* 요약 모달: 캔버스는 1080px로 그리고 화면 폭에 맞춰 줄인다.
+     휠을 굴리지 않아도 한눈에 보이게, 머리·저장 줄(약 134px)과 바깥 여백을 뺀 높이에 맞춰 모달 폭도 캔버스 비율(--summary-ratio)대로 줄인다.
+     캔버스만 줄이면 모달 끝에 붙은 닫기·저장 버튼과 캔버스 끝이 어긋난다 */
   .summary {
-    width: min(720px, calc(100vw - 32px)); max-height: calc(100dvh - 32px); padding: 16px; overflow: auto;
+    width: min(720px, calc(100vw - 32px), calc((100dvh - 166px) * var(--summary-ratio, 1) + 34px)); max-height: calc(100dvh - 32px); padding: 16px; overflow: auto;
     background: var(--surface); color: var(--text); border: 1px solid var(--line); border-radius: 16px;
   }
   .summary::backdrop { background: rgba(0, 0, 0, .5); }
@@ -196,8 +198,7 @@
     width: 36px; height: 36px; background: none; border: 1px solid var(--line); border-radius: 8px;
     color: var(--text); font-size: 20px; line-height: 1; cursor: pointer;
   }
-  /* 휠을 굴리지 않아도 한눈에 보이게, 머리·저장 줄(약 134px)과 바깥 여백을 뺀 높이에 맞춰 비율대로 줄인다 */
-  #summary-canvas { display: block; width: auto; height: auto; max-width: 100%; max-height: calc(100dvh - 166px); margin: 0 auto; border-radius: 10px; }
+  #summary-canvas { display: block; width: 100%; height: auto; border-radius: 10px; }
   .summary-actions { display: flex; justify-content: flex-end; margin-top: 12px; }
   .summary-save {
     height: 40px; padding: 0 16px; border: none; border-radius: 10px; background: var(--text); color: var(--surface);

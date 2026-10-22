@@ -261,11 +261,14 @@ export async function openSummary(root, state, win = window) {
   const view = summaryView(state.data, state.now);
   const site = win.location.host;
   canvas.setAttribute('aria-label', summaryLabel(view));
+  const height = summaryHeight(view);
   save.disabled = true;
+  // 모달 폭을 캔버스 비율에 맞춰 화면 높이 안에 들어오게 한다 (index.html .summary)
+  dialog.style.setProperty('--summary-ratio', SUMMARY_WIDTH / height);
   if (!dialog.open) dialog.showModal();
   await loadFonts(root.fonts, summaryText(view, site));
   canvas.width = SUMMARY_WIDTH;
-  canvas.height = summaryHeight(view);
+  canvas.height = height;
   drawSummary(canvas.getContext('2d'), view, readPalette(win.getComputedStyle(root.documentElement)), site);
   // 저장할 파일을 미리 만든다. iOS는 누른 직후에만 공유를 허용해, 누른 뒤 기다리면 공유 시트가 막힌다
   const blob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/png'));

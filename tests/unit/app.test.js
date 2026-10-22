@@ -568,6 +568,7 @@ describe('전체 요약', () => {
     await opened();
     expect($('#summary').showModal).toHaveBeenCalledOnce();
     expect($('#summary-canvas').width).toBe(1080);
+    expect(Number($('#summary').style.getPropertyValue('--summary-ratio'))).toBeCloseTo(1080 / $('#summary-canvas').height);
     expect($('#summary-canvas').getAttribute('aria-label')).toBe('전체 기록 요약: 2026.10.01 ~ 2026.10.02, 방송 0일, 휴방 1일, 휴방률 100%');
     expect($('#summary-save').disabled).toBe(false);
     const state = await opened();

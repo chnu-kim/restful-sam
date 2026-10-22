@@ -340,6 +340,11 @@ test('요약 미리보기가 스크롤 없이 화면 높이 안에 다 보인다
   const fit = await page.locator('#summary').evaluate((d) => ({ scroll: d.scrollHeight - d.clientHeight, bottom: d.getBoundingClientRect().bottom }));
   expect(fit.scroll).toBeLessThanOrEqual(0);
   expect(fit.bottom).toBeLessThanOrEqual(600);
+  // 캔버스가 줄어도 닫기·저장 버튼의 오른쪽 끝이 캔버스 끝과 맞는다
+  const right = (id) => page.locator(id).evaluate((e) => e.getBoundingClientRect().right);
+  const canvasRight = await right('#summary-canvas');
+  expect(Math.abs((await right('#summary-save')) - canvasRight)).toBeLessThanOrEqual(1);
+  expect(Math.abs((await right('#summary-close')) - canvasRight)).toBeLessThanOrEqual(1);
 });
 
 test('웹폰트 요청이 멈춰도 요약을 그리고 저장할 수 있다', async ({ page }) => {
