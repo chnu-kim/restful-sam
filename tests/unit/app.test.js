@@ -570,17 +570,17 @@ describe('전체 요약', () => {
     expect($('#summary-canvas').width).toBe(1080);
     expect($('#summary-canvas').getAttribute('aria-label')).toBe('전체 기록 요약: 2026.10.01 ~ 2026.10.02, 방송 0일, 휴방 1일, 휴방률 100%');
     expect($('#summary-save').disabled).toBe(false);
-    expect($('#summary-save').dataset.name).toBe('삼덕이-휴방-요약-2026-10-02.png');
+    const state = await opened();
+    expect(state.summaryFile.name).toBe('삼덕이-휴방-요약-2026-10-02.png');
     // 이미 열려 있으면 다시 띄우지 않는다
-    await opened();
     expect($('#summary').showModal).toHaveBeenCalledOnce();
   });
 
   it('데스크톱에선 파일로 내려받는다', async () => {
     const win = fakeWindow();
-    await opened(win);
+    const state = await opened(win);
     const click = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(function () { this.dataset.clicked = this.download; });
-    await expect(saveSummary(document, win)).resolves.toBe('downloaded');
+    await expect(saveSummary(document, state, win)).resolves.toBe('downloaded');
     expect(click).toHaveBeenCalledOnce();
     expect(win.URL.revokeObjectURL).toHaveBeenCalledWith('blob:x');
     click.mockRestore();
@@ -588,21 +588,23 @@ describe('전체 요약', () => {
 
   it('터치 기기에선 공유 시트로 넘기고, 취소하면 그만둔다', async () => {
     const share = vi.fn(async () => {});
-    await opened();
-    await expect(saveSummary(document, fakeWindow({ coarse: true, share }))).resolves.toBe('shared');
+    const state = await opened();
+    await expect(saveSummary(document, state, fakeWindow({ coarse: true, share }))).resolves.toBe('shared');
     expect(share.mock.calls[0][0].files[0].name).toBe('삼덕이-휴방-요약-2026-10-02.png');
     const abort = vi.fn(async () => { throw new DOMException('cancel', 'AbortError'); });
-    await expect(saveSummary(document, fakeWindow({ coarse: true, share: abort }))).resolves.toBe('cancelled');
+    await expect(saveSummary(document, state, fakeWindow({ coarse: true, share: abort }))).resolves.toBe('cancelled');
   });
 
-  it('공유가 막히면 내려받기로 넘어가고, 이미지를 못 만들면 실패', async () => {
-    await opened();
+  it('공유가 막히면 내려받기로 넘어가고, 이미지를 못 만들면 저장 버튼을 끈 채 실패', async () => {
+    const state = await opened();
     const click = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {});
     const denied = vi.fn(async () => { throw new DOMException('no', 'NotAllowedError'); });
-    await expect(saveSummary(document, fakeWindow({ coarse: true, share: denied }))).resolves.toBe('downloaded');
+    await expect(saveSummary(document, state, fakeWindow({ coarse: true, share: denied }))).resolves.toBe('downloaded');
     click.mockRestore();
     $('#summary-canvas').toBlob = (cb) => cb(null);
-    await expect(saveSummary(document, fakeWindow())).resolves.toBe('failed');
+    await openSummary(document, state, fakeWindow());
+    expect($('#summary-save').disabled).toBe(true);
+    await expect(saveSummary(document, state, fakeWindow())).resolves.toBe('failed');
   });
 
   it('버튼으로 열고 닫으며, 바깥을 누르면 닫힌다', async () => {
