@@ -196,7 +196,8 @@
     width: 36px; height: 36px; background: none; border: 1px solid var(--line); border-radius: 8px;
     color: var(--text); font-size: 20px; line-height: 1; cursor: pointer;
   }
-  #summary-canvas { display: block; width: 100%; height: auto; border-radius: 10px; }
+  /* 휠을 굴리지 않아도 한눈에 보이게, 머리·저장 줄(약 134px)과 바깥 여백을 뺀 높이에 맞춰 비율대로 줄인다 */
+  #summary-canvas { display: block; width: auto; height: auto; max-width: 100%; max-height: calc(100dvh - 166px); margin: 0 auto; border-radius: 10px; }
   .summary-actions { display: flex; justify-content: flex-end; margin-top: 12px; }
   .summary-save {
     height: 40px; padding: 0 16px; border: none; border-radius: 10px; background: var(--text); color: var(--surface);

@@ -332,6 +332,16 @@ test('전체 요약을 열어 PNG로 저장하고, 320px에서도 넘치지 않�
   expect(errors).toEqual([]);
 });
 
+test('요약 미리보기가 스크롤 없이 화면 높이 안에 다 보인다', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 600 });
+  await open(page);
+  await page.locator('#summary-open').click();
+  await expect(page.locator('#summary-save')).toBeEnabled();
+  const fit = await page.locator('#summary').evaluate((d) => ({ scroll: d.scrollHeight - d.clientHeight, bottom: d.getBoundingClientRect().bottom }));
+  expect(fit.scroll).toBeLessThanOrEqual(0);
+  expect(fit.bottom).toBeLessThanOrEqual(600);
+});
+
 test('웹폰트 요청이 멈춰도 요약을 그리고 저장할 수 있다', async ({ page }) => {
   // 폰트 파일 요청에 응답하지 않는다. 그러면 load 이벤트가 오지 않으므로 DOM까지만 기다린다
   await page.route('https://fonts.gstatic.com/**', () => {});
