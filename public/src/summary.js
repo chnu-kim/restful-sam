@@ -75,12 +75,21 @@ export function summaryText(v, site) {
   ].join('');
 }
 
-export async function loadFonts(fonts, text) {
+// 폰트 요청이 멈춰도 미리보기·저장이 막히지 않도록 이만큼만 기다린다
+export const FONT_TIMEOUT_MS = 3000;
+
+export async function loadFonts(fonts, text, timeout = FONT_TIMEOUT_MS) {
   if (!fonts) return;
+  let timer;
   try {
-    await Promise.all([400, 600, 700].map((w) => fonts.load(font(w, 20), text)));
+    await Promise.race([
+      Promise.all([400, 600, 700].map((w) => fonts.load(font(w, 20), text))),
+      new Promise((resolve) => { timer = setTimeout(resolve, timeout); }),
+    ]);
   } catch {
     // 폰트를 못 받으면 시스템 글꼴로 그린다
+  } finally {
+    clearTimeout(timer);
   }
 }
 

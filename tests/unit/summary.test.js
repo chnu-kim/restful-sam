@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { countDays, makeContext } from '../../public/src/calendar.js';
 import {
-  SUMMARY_WIDTH, drawSummary, loadFonts, readPalette, summaryFileName, summaryHeight, summaryLabel, summaryText, summaryView,
+  FONT_TIMEOUT_MS, SUMMARY_WIDTH, drawSummary, loadFonts, readPalette, summaryFileName, summaryHeight, summaryLabel, summaryText, summaryView,
 } from '../../public/src/summary.js';
 
 const KST = (s) => Date.parse(s.replace(' ', 'T') + '+09:00');
@@ -112,6 +112,14 @@ describe('loadFonts', () => {
     await loadFonts(fonts, '가나');
     expect(fonts.load).toHaveBeenCalledTimes(3);
     expect(fonts.load).toHaveBeenCalledWith(expect.stringContaining('700 20px'), '가나');
+  });
+
+  it('폰트 요청이 끝나지 않으면 기다리다 넘어간다', async () => {
+    vi.useFakeTimers();
+    const done = loadFonts({ load: () => new Promise(() => {}) }, 'x');
+    await vi.advanceTimersByTimeAsync(FONT_TIMEOUT_MS);
+    await expect(done).resolves.toBeUndefined();
+    vi.useRealTimers();
   });
 
   it('폰트 API가 없거나 실패해도 넘어간다', async () => {

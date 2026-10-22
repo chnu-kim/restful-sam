@@ -331,3 +331,14 @@ test('전체 요약을 열어 PNG로 저장하고, 320px에서도 넘치지 않�
   await expect(page.locator('#summary')).toBeHidden();
   expect(errors).toEqual([]);
 });
+
+test('웹폰트 요청이 멈춰도 요약을 그리고 저장할 수 있다', async ({ page }) => {
+  // 폰트 파일 요청에 응답하지 않는다. 그러면 load 이벤트가 오지 않으므로 DOM까지만 기다린다
+  await page.route('https://fonts.gstatic.com/**', () => {});
+  await page.clock.setFixedTime(KST('2026-10-02 12:00:00'));
+  await page.route('**/data/streams.json', (route) => route.fulfill({ contentType: 'application/json', body: JSON.stringify(BASE) }));
+  await page.goto('/', { waitUntil: 'domcontentloaded' });
+  await expect(page.locator('#summary-open')).toBeEnabled();
+  await page.locator('#summary-open').click();
+  await expect(page.locator('#summary-save')).toBeEnabled({ timeout: 8000 });
+});
