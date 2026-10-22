@@ -90,9 +90,14 @@ export function dayStatus(d, ctx) {
 // ym 달(기본: 오늘이 속한 달)의 1일부터 말일 또는 오늘까지의 방송·휴방 일수. 휴방률은 판정된 날이 없으면 null
 // 기록 시작 전 날짜는 방송 기록이 있어도 세지 않는다 (휴방 여부를 모르는 날과 같은 기준으로 맞춤)
 export function computeStats(ctx, ym = ctx.today.slice(0, 7)) {
+  return { ...countDays(ctx, monthDays(ym)), ...currentStreak(ctx) };
+}
+
+// 날짜 목록(오름차순) 중 방송·휴방으로 판정된 일수와 휴방률. 월 통계와 전체 요약이 같이 쓴다
+export function countDays(ctx, days) {
   let on = 0;
   let off = 0;
-  for (const d of monthDays(ym)) {
+  for (const d of days) {
     if (d > ctx.today) break;
     if (d < ctx.since) continue;
     const s = dayStatus(d, ctx);
@@ -100,7 +105,7 @@ export function computeStats(ctx, ym = ctx.today.slice(0, 7)) {
     else if (s === 'off') off++;
   }
   const offRate = on + off ? Math.round((off / (on + off)) * 100) : null;
-  return { on, off, offRate, ...currentStreak(ctx) };
+  return { on, off, offRate };
 }
 
 // 가장 최근에 판정된 날부터 거슬러 올라가며 같은 상태가 이어진 일수를 센다 (오늘 미정·미확인인 날은 건너뜀)

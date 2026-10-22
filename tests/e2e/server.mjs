@@ -6,6 +6,8 @@ import { fileURLToPath } from 'node:url';
 
 const REPO = fileURLToPath(new URL('../../', import.meta.url));
 const PORT = Number(process.argv[2] || 4173);
+// 배포와 같은 CSP를 걸어, 막히는 기능(예: 이미지 저장)을 e2e에서 잡는다
+const CSP = (await readFile(join(REPO, 'public/_headers'), 'utf8')).match(/Content-Security-Policy: (.+)/)[1];
 const TYPES = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript', '.json': 'application/json' };
 
 createServer(async (req, res) => {
@@ -14,7 +16,7 @@ createServer(async (req, res) => {
   const file = join(root, path.endsWith('/') ? path + 'index.html' : path);
   try {
     const body = await readFile(file);
-    res.writeHead(200, { 'Content-Type': TYPES[extname(file)] || 'application/octet-stream' });
+    res.writeHead(200, { 'Content-Type': TYPES[extname(file)] || 'application/octet-stream', 'Content-Security-Policy': CSP });
     res.end(body);
   } catch {
     res.writeHead(404).end('not found');

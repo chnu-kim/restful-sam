@@ -3,6 +3,7 @@ import {
   DOW, addDays, addMonths, computeStats, dayOfWeek, dayMinutes, dayStatus, dayTimeRange, durationLong, esc, fillPercent, firstMonth, hm, liveFresh, liveStream,
   makeContext, monthDays, monthLabel, offStreakBefore, offStreakText, startedAt, streamMinutes, todayKst,
 } from './calendar.js';
+import { SUMMARY_WIDTH, drawSummary, loadFonts, readPalette, summaryFileName, summaryHeight, summaryLabel, summaryText, summaryView } from './summary.js';
 
 const MARKS = { on: '방송', off: '휴방', pending: '?', unknown: '미확인', nodata: '', future: '' };
 const LABELS = { on: '방송', off: '휴방', pending: '아직 방송 전', unknown: '확인 전', nodata: '기록 없음', future: '' };
@@ -252,6 +253,63 @@ export function bindTheme(root = document, win = window) {
   sync();
 }
 
+// 전체 기록 요약: 열 때마다 현재 테마 색으로 다시 그린다
+export async function openSummary(root, state, win = window) {
+  const dialog = root.getElementById('summary');
+  const canvas = root.getElementById('summary-canvas');
+  const save = root.getElementById('summary-save');
+  const view = summaryView(state.data, state.now);
+  const site = win.location.host;
+  canvas.setAttribute('aria-label', summaryLabel(view));
+  save.disabled = true;
+  if (!dialog.open) dialog.showModal();
+  await loadFonts(root.fonts, summaryText(view, site));
+  canvas.width = SUMMARY_WIDTH;
+  canvas.height = summaryHeight(view);
+  drawSummary(canvas.getContext('2d'), view, readPalette(win.getComputedStyle(root.documentElement)), site);
+  save.dataset.name = summaryFileName(view);
+  save.disabled = false;
+}
+
+// 폰(터치)에선 공유 시트로 넘겨 사진에 저장할 수 있게 하고, 그 밖에는 파일로 내려받는다
+export async function saveSummary(root, win = window) {
+  const canvas = root.getElementById('summary-canvas');
+  const name = root.getElementById('summary-save').dataset.name;
+  const blob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/png'));
+  if (!blob) return 'failed';
+  const file = new win.File([blob], name, { type: 'image/png' });
+  if (win.matchMedia?.('(pointer: coarse)').matches && win.navigator.canShare?.({ files: [file] })) {
+    try {
+      await win.navigator.share({ files: [file] });
+      return 'shared';
+    } catch (e) {
+      if (e?.name === 'AbortError') return 'cancelled';
+      // 공유가 막혔으면 내려받기로 넘어간다
+    }
+  }
+  const url = win.URL.createObjectURL(blob);
+  const a = root.createElement('a');
+  a.href = url;
+  a.download = name;
+  a.click();
+  win.setTimeout(() => win.URL.revokeObjectURL(url), 10_000);
+  return 'downloaded';
+}
+
+export function bindSummary(root, state, win = window) {
+  const dialog = root.getElementById('summary');
+  const open = root.getElementById('summary-open');
+  open.addEventListener('click', () => openSummary(root, state, win));
+  root.getElementById('summary-close').addEventListener('click', () => dialog.close());
+  // 바깥(배경)을 누르면 닫는다. 배경 클릭도 target이 dialog라 모달 테두리 안쪽(여백) 클릭과 위치로 가른다
+  dialog.addEventListener('click', (e) => {
+    const r = dialog.getBoundingClientRect();
+    if (e.target === dialog && (e.clientX < r.left || e.clientX > r.right || e.clientY < r.top || e.clientY > r.bottom)) dialog.close();
+  });
+  root.getElementById('summary-save').addEventListener('click', () => saveSummary(root, win));
+  open.disabled = false;
+}
+
 export async function init(root = document, fetchImpl = fetch, now = Date.now()) {
   try {
     const res = await fetchImpl('data/streams.json', { cache: 'no-store' });
@@ -263,6 +321,7 @@ export async function init(root = document, fetchImpl = fetch, now = Date.now())
     root.getElementById('next').addEventListener('click', () => shiftMonth(root, state, 1));
     bindHover(root, state);
     renderAll(root, state);
+    bindSummary(root, state);
     return state;
   } catch {
     renderError(root);
