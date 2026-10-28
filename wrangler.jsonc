@@ -23,10 +23,11 @@
   ],
   // 1분마다 방송 상태 수집
   "triggers": { "crons": ["* * * * *"] },
-  // 로그와 트레이스. 무료 한도(하루 20만 건)에 비해 사용량(하루 1만 건 남짓)이 작아 전부 남긴다
+  // 로그는 경고('형식 이상', '다시보기 보충 실패')와 실행별 CPU 측정에 쓰여 전부 남긴다.
+  // 트레이스는 실행마다 구간 기록을 더해 CPU 10ms 한도를 빠듯하게 하고 쓰는 곳이 없어 10%만 남긴다
   "observability": {
     "enabled": true,
     "logs": { "enabled": true, "head_sampling_rate": 1 },
-    "traces": { "enabled": true, "head_sampling_rate": 1 }
+    "traces": { "enabled": true, "head_sampling_rate": 0.1 }
   }
 }
