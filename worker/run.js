@@ -4,6 +4,8 @@ import { applyLiveStatus, backfillFromReplays, fetchLiveStatus, todayKst, valida
 const DOC_KEY = 'streams';
 // 다시보기 보충은 보조 수단이라 10분에 한 번만 한다 (비공식 API 호출을 줄이려고)
 export const BACKFILL_EVERY_MIN = 10;
+// 짝수 분의 링크 카드 확인(card.js)과 한 실행에 겹치면 CPU 10ms 한도를 넘기 쉬워, 5·15·25…분에 돈다
+export const BACKFILL_PHASE_MIN = 5;
 
 // 저장된 원문(raw)도 함께 돌려줘, 저장할 때 그 사이 다른 실행이 바꿨는지 비교한다
 export async function loadDoc(db) {
@@ -28,7 +30,7 @@ export async function collect(env, { fetchImpl = fetch, now = Date.now(), servic
   const doc = await loadDoc(env.DB);
   if (!doc) throw new Error('D1에 방송 기록이 없습니다. data/streams.json으로 먼저 시드하세요');
   let next = applyLiveStatus(doc.data, live, today, new Date(now).toISOString());
-  if (Math.floor(now / 60000) % BACKFILL_EVERY_MIN === 0) {
+  if (Math.floor(now / 60000) % BACKFILL_EVERY_MIN === BACKFILL_PHASE_MIN) {
     try {
       next = await backfillFromReplays(next, { fetchImpl, serviceBase });
     } catch (e) {
