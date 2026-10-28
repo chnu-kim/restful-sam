@@ -12,6 +12,8 @@ const MONTH_GAP_Y = 40;
 const CELL_GAP = 6;
 const MONTH_LABEL = 30;
 const DOW_ROW = 28;
+// 제목 아래 일수 칸이 시작하는 y. 높이 계산(layout)과 그리기(drawSummary)가 같이 쓴다
+const TILE_Y = PAD + 210;
 const TILE_H = 116;
 const LEGEND_H = 24;
 const FOOTER_H = 22;
@@ -115,7 +117,7 @@ function layout(v) {
   const weeks = Math.max(...v.months.map((m) => Math.ceil(m.cells.length / 7)));
   const monthH = MONTH_LABEL + 16 + DOW_ROW + 8 + weeks * cell + (weeks - 1) * CELL_GAP;
   const rows = Math.ceil(v.months.length / cols);
-  const panelY = PAD + 210 + TILE_H + 40;
+  const panelY = TILE_Y + TILE_H + 40;
   const panelH = PANEL_PAD * 2 + rows * monthH + (rows - 1) * MONTH_GAP_Y;
   const legendY = panelY + panelH + 28;
   return { cols, panelW, monthW, cell, monthH, panelY, panelH, legendY, height: legendY + LEGEND_H + 20 + FOOTER_H + PAD };
@@ -190,7 +192,6 @@ export function drawSummary(g, v, p, site) {
   g.fillText(`${v.range} (${v.days}일)`, PAD, PAD + 128);
 
   // 방송·휴방 일수 칸 (페이지의 .stat)
-  const tileY = PAD + 210;
   const tileW = (L.panelW - 16 * 2) / 3;
   TILES(v).forEach(([value, label], i) => {
     const x = PAD + i * (tileW + 16);
@@ -198,15 +199,15 @@ export function drawSummary(g, v, p, site) {
     g.strokeStyle = p.line;
     g.lineWidth = 2;
     g.beginPath();
-    g.roundRect(x + 1, tileY + 1, tileW - 2, TILE_H - 2, 18);
+    g.roundRect(x + 1, TILE_Y + 1, tileW - 2, TILE_H - 2, 18);
     g.fill();
     g.stroke();
     g.fillStyle = [p.onText, p.offText, p.text][i];
     g.font = font(700, 44);
-    g.fillText(value, x + 24, tileY + 18);
+    g.fillText(value, x + 24, TILE_Y + 18);
     g.fillStyle = p.muted;
     g.font = font(400, 22);
-    g.fillText(label, x + 24, tileY + 74);
+    g.fillText(label, x + 24, TILE_Y + 74);
   });
 
   // 달력 (페이지의 .cal)
