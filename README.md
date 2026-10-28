@@ -141,7 +141,7 @@ public/            정적 페이지 (Worker의 assets)
   index.html
   src/app.js       화면 렌더링
   src/calendar.js  날짜별 상태·통계 계산 (순수 함수)
-  src/summary.js   전체 요약 이미지 (캔버스에 그려 모달 표시·PNG 저장에 같이 씀)
+  src/summary.js   기록 요약 이미지(이번 달·전체, 캔버스에 그려 모달 표시·PNG 저장에 같이 씀)
 worker/
   index.js         Worker 진입 파일 (fetch·scheduled 핸들러만 export)
   run.js           D1 읽기·쓰기, 한 번의 수집

@@ -194,6 +194,13 @@
   .summary::backdrop { background: rgba(0, 0, 0, .5); }
   .summary-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
   .summary-head h2 { margin: 0; font-size: 18px; }
+  .summary-head-end { display: flex; align-items: center; gap: 8px; }
+  .summary-scope { display: flex; padding: 3px; border: 1px solid var(--line); border-radius: 10px; }
+  .summary-scope button {
+    height: 28px; padding: 0 10px; background: none; border: none; border-radius: 7px; color: var(--muted);
+    font: inherit; font-size: 13px; font-weight: 600; cursor: pointer;
+  }
+  .summary-scope button[aria-pressed="true"] { background: var(--text); color: var(--surface); }
   .summary-close {
     width: 36px; height: 36px; background: none; border: 1px solid var(--line); border-radius: 8px;
     color: var(--text); font-size: 20px; line-height: 1; cursor: pointer;
@@ -251,8 +258,14 @@
 
   <dialog class="summary" id="summary" aria-labelledby="summary-title">
     <div class="summary-head">
-      <h2 id="summary-title">전체 기록 요약</h2>
-      <button class="summary-close" id="summary-close" type="button" aria-label="닫기">×</button>
+      <h2 id="summary-title">요약</h2>
+      <div class="summary-head-end">
+        <div class="summary-scope" role="group" aria-label="요약 범위">
+          <button type="button" data-scope="month" aria-pressed="true">이번 달</button>
+          <button type="button" data-scope="all" aria-pressed="false">전체</button>
+        </div>
+        <button class="summary-close" id="summary-close" type="button" aria-label="닫기">×</button>
+      </div>
     </div>
     <canvas id="summary-canvas" role="img"></canvas>
     <div class="summary-actions">

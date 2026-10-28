@@ -536,7 +536,7 @@ describe('init', () => {
   });
 });
 
-describe('전체 요약', () => {
+describe('기록 요약', () => {
   // jsdom에는 모달·캔버스가 없어 필요한 만큼만 흉내 낸다
   const fakeWindow = ({ coarse = false, share } = {}) => ({
     location: { host: 'example.com' },
@@ -569,12 +569,46 @@ describe('전체 요약', () => {
     expect($('#summary').showModal).toHaveBeenCalledOnce();
     expect($('#summary-canvas').width).toBe(1080);
     expect(Number($('#summary').style.getPropertyValue('--summary-ratio'))).toBeCloseTo(1080 / $('#summary-canvas').height);
-    expect($('#summary-canvas').getAttribute('aria-label')).toBe('전체 기록 요약: 2026.10.01 ~ 2026.10.02, 방송 0일, 휴방 1일, 휴방률 100%');
+    expect($('#summary-canvas').getAttribute('aria-label')).toBe('이번 달 요약: 2026.10.01 ~ 2026.10.02, 방송 0일, 휴방 1일, 휴방률 100%');
+    expect($('[data-scope="month"]').getAttribute('aria-pressed')).toBe('true');
     expect($('#summary-save').disabled).toBe(false);
     const state = await opened();
-    expect(state.summaryFile.name).toBe('삼덕이-휴방-요약-2026-10-02.png');
+    expect(state.summaryFile.name).toBe('삼덕이-휴방-요약-2026-10.png');
     // 이미 열려 있으면 다시 띄우지 않는다
     expect($('#summary').showModal).toHaveBeenCalledOnce();
+  });
+
+  it('범위 버튼으로 전체 요약으로 바꾸고, 다시 열면 이번 달로 돌아간다', async () => {
+    const state = createState(DATA, KST('2026-10-02 12:00:00'));
+    bindSummary(document, state, fakeWindow());
+    $('#summary-open').click();
+    await vi.waitFor(() => expect($('#summary-save').disabled).toBe(false));
+    $('[data-scope="all"]').click();
+    await vi.waitFor(() => expect(state.summaryFile?.name).toBe('삼덕이-휴방-요약-전체-2026-10-02.png'));
+    expect($('[data-scope="all"]').getAttribute('aria-pressed')).toBe('true');
+    expect($('[data-scope="month"]').getAttribute('aria-pressed')).toBe('false');
+    expect($('#summary-canvas').getAttribute('aria-label')).toMatch(/^전체 기록 요약: /);
+    $('#summary').close();
+    $('#summary-open').click();
+    await vi.waitFor(() => expect(state.summaryFile?.name).toBe('삼덕이-휴방-요약-2026-10.png'));
+    expect($('[data-scope="month"]').getAttribute('aria-pressed')).toBe('true');
+  });
+
+  it('폰트를 기다리는 사이 범위를 바꾸면 마지막 범위만 그린다', async () => {
+    const state = createState(DATA, KST('2026-10-02 12:00:00'));
+    const fonts = [];
+    Object.defineProperty(document, 'fonts', { configurable: true, value: { load: () => new Promise((r) => fonts.push(r)) } });
+    const first = openSummary(document, state, fakeWindow(), 'all');
+    const second = openSummary(document, state, fakeWindow(), 'month');
+    // 나중 요청이 먼저 끝나고, 앞 요청이 늦게 끝나도 덮어쓰지 않는다
+    await vi.waitFor(() => expect(fonts.length).toBe(6));
+    fonts.slice(3).forEach((r) => r());
+    await second;
+    fonts.slice(0, 3).forEach((r) => r());
+    await first;
+    delete document.fonts;
+    expect(state.summaryFile.name).toBe('삼덕이-휴방-요약-2026-10.png');
+    expect($('#summary-canvas').getAttribute('aria-label')).toMatch(/^이번 달 요약: /);
   });
 
   it('데스크톱에선 파일로 내려받는다', async () => {
@@ -591,7 +625,7 @@ describe('전체 요약', () => {
     const share = vi.fn(async () => {});
     const state = await opened();
     await expect(saveSummary(document, state, fakeWindow({ coarse: true, share }))).resolves.toBe('shared');
-    expect(share.mock.calls[0][0].files[0].name).toBe('삼덕이-휴방-요약-2026-10-02.png');
+    expect(share.mock.calls[0][0].files[0].name).toBe('삼덕이-휴방-요약-2026-10.png');
     const abort = vi.fn(async () => { throw new DOMException('cancel', 'AbortError'); });
     await expect(saveSummary(document, state, fakeWindow({ coarse: true, share: abort }))).resolves.toBe('cancelled');
   });

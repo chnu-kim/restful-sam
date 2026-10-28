@@ -253,25 +253,31 @@ export function bindTheme(root = document, win = window) {
   sync();
 }
 
-// 전체 기록 요약: 열 때마다 현재 테마 색으로 다시 그린다
-export async function openSummary(root, state, win = window) {
+// 기록 요약: 열 때마다, 또 범위를 바꿀 때마다 현재 테마 색으로 다시 그린다
+export async function openSummary(root, state, win = window, scope = 'month') {
   const dialog = root.getElementById('summary');
   const canvas = root.getElementById('summary-canvas');
   const save = root.getElementById('summary-save');
-  const view = summaryView(state.data, state.now);
+  // 폰트를 기다리는 사이 범위를 또 바꾸면, 먼저 시작한 그리기가 늦게 끝나 덮어쓰지 않게 마지막 요청만 그린다
+  const seq = (state.summarySeq = (state.summarySeq ?? 0) + 1);
+  const view = summaryView(state.data, state.now, scope);
   const site = win.location.host;
+  for (const b of root.querySelectorAll('[data-scope]')) b.setAttribute('aria-pressed', String(b.dataset.scope === scope));
   canvas.setAttribute('aria-label', summaryLabel(view));
   const height = summaryHeight(view);
   save.disabled = true;
+  state.summaryFile = null;
   // 모달 폭을 캔버스 비율에 맞춰 화면 높이 안에 들어오게 한다 (index.html .summary)
   dialog.style.setProperty('--summary-ratio', SUMMARY_WIDTH / height);
   if (!dialog.open) dialog.showModal();
   await loadFonts(root.fonts, summaryText(view, site));
+  if (seq !== state.summarySeq) return;
   canvas.width = SUMMARY_WIDTH;
   canvas.height = height;
   drawSummary(canvas.getContext('2d'), view, readPalette(win.getComputedStyle(root.documentElement)), site);
   // 저장할 파일을 미리 만든다. iOS는 누른 직후에만 공유를 허용해, 누른 뒤 기다리면 공유 시트가 막힌다
   const blob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/png'));
+  if (seq !== state.summarySeq) return;
   state.summaryFile = blob && new win.File([blob], summaryFileName(view), { type: 'image/png' });
   save.disabled = !state.summaryFile;
 }
@@ -303,6 +309,9 @@ export function bindSummary(root, state, win = window) {
   const open = root.getElementById('summary-open');
   open.addEventListener('click', () => openSummary(root, state, win));
   root.getElementById('summary-close').addEventListener('click', () => dialog.close());
+  for (const b of root.querySelectorAll('[data-scope]')) {
+    b.addEventListener('click', () => b.getAttribute('aria-pressed') !== 'true' && openSummary(root, state, win, b.dataset.scope));
+  }
   // 바깥(배경)을 누르면 닫는다. 배경 클릭도 target이 dialog라 모달 테두리 안쪽(여백) 클릭과 위치로 가른다
   dialog.addEventListener('click', (e) => {
     const r = dialog.getBoundingClientRect();

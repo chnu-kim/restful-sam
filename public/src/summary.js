@@ -1,4 +1,4 @@
-// 전체 기록 요약 이미지. 모달에 보이는 캔버스를 그대로 PNG로 저장해 화면과 파일이 어긋나지 않게 한다.
+// 기록 요약 이미지(이번 달·전체). 모달에 보이는 캔버스를 그대로 PNG로 저장해 화면과 파일이 어긋나지 않게 한다.
 // 칸 판정은 달력과 같은 calendar.js 함수를 쓰고, 색은 페이지의 CSS 변수(현재 테마)에서 읽어 온다
 import {
   DOW, addDays, addMonths, countDays, dayMinutes, dayOfWeek, dayStatus, fillPercent, firstMonth, makeContext, monthDays, todayKst,
@@ -30,18 +30,27 @@ export function readPalette(style) {
 
 const dotDate = (d) => d.replaceAll('-', '.');
 
-// 그릴 내용. 일수는 기록 시작일부터 오늘까지(월 통계와 같은 규칙), 달력은 달력에서 넘길 수 있는 첫 달부터 이번 달까지
-export function summaryView(data, now) {
+// 요약 범위. 이번 달은 오늘이 속한 달 하나, 전체는 기록이 있는 모든 달
+export const SCOPES = {
+  month: { title: (ym) => `${Number(ym.slice(5))}월 기록`, label: '이번 달 요약', file: (today) => today.slice(0, 7) },
+  all: { title: () => '전체 기록', label: '전체 기록 요약', file: (today) => `전체-${today}` },
+};
+
+// 그릴 내용. 일수는 시작일(기록 시작일, 이번 달이면 그달 1일과 비교해 늦은 쪽)부터 오늘까지로 월 통계와 같은 규칙,
+// 달력은 이번 달이면 그달만, 전체면 달력에서 넘길 수 있는 첫 달부터 이번 달까지
+export function summaryView(data, now, scope = 'month') {
   const today = todayKst(now);
+  const ym = today.slice(0, 7);
   const ctx = makeContext(data, today);
+  const start = scope === 'month' && `${ym}-01` > data.since ? `${ym}-01` : data.since;
   const days = [];
-  for (let d = data.since; d <= today; d = addDays(d, 1)) days.push(d);
+  for (let d = start; d <= today; d = addDays(d, 1)) days.push(d);
   const months = [];
-  for (let ym = firstMonth(data); ym <= today.slice(0, 7); ym = addMonths(ym, 1)) {
-    const md = monthDays(ym);
-    const [y, m] = ym.split('-').map(Number);
+  for (let m = scope === 'month' ? ym : firstMonth(data); m <= ym; m = addMonths(m, 1)) {
+    const md = monthDays(m);
+    const [y, mo] = m.split('-').map(Number);
     months.push({
-      label: `${y}년 ${m}월`,
+      label: `${y}년 ${mo}월`,
       cells: [
         ...Array.from({ length: dayOfWeek(md[0]) }, () => ({ status: 'blank', day: null, fill: null })),
         ...md.map((d) => {
@@ -53,12 +62,15 @@ export function summaryView(data, now) {
       ],
     });
   }
-  return { today, range: `${dotDate(data.since)} ~ ${dotDate(today)}`, days: days.length, ...countDays(ctx, days), months };
+  const s = SCOPES[scope];
+  return {
+    scope, today, title: s.title(ym), range: `${dotDate(start)} ~ ${dotDate(today)}`, days: days.length, ...countDays(ctx, days), months,
+  };
 }
 
 // 스크린 리더용 설명과 저장 파일 이름
-export const summaryLabel = (v) => `전체 기록 요약: ${v.range}, 방송 ${v.on}일, 휴방 ${v.off}일, 휴방률 ${v.offRate ?? '-'}%`;
-export const summaryFileName = (v) => `삼덕이-휴방-요약-${v.today}.png`;
+export const summaryLabel = (v) => `${SCOPES[v.scope].label}: ${v.range}, 방송 ${v.on}일, 휴방 ${v.off}일, 휴방률 ${v.offRate ?? '-'}%`;
+export const summaryFileName = (v) => `삼덕이-휴방-요약-${SCOPES[v.scope].file(v.today)}.png`;
 
 const TILES = (v) => [
   [`${v.on}일`, '방송한 날'],
@@ -70,7 +82,7 @@ const LEGEND = [['on', '방송 (채운 높이: 방송 시간)'], ['off', '휴방
 // 캔버스 글꼴은 웹폰트 중 이미 받은 글자만 쓰므로, 그릴 글자를 미리 받아 둔다
 export function summaryText(v, site) {
   return [
-    '삼덕이 휴방 체크', '전체 기록', `${v.range} (${v.days}일)`, site, ...DOW,
+    '삼덕이 휴방 체크', v.title, `${v.range} (${v.days}일)`, site, ...DOW,
     ...TILES(v).flat(), ...LEGEND.map(([, t]) => t), ...v.months.map((m) => m.label), '0123456789',
   ].join('');
 }
@@ -94,8 +106,8 @@ export async function loadFonts(fonts, text, timeout = FONT_TIMEOUT_MS) {
 }
 
 function layout(v) {
-  // 달이 하나뿐이어도 칸이 커지지 않게 두 칸 폭을 유지한다
-  const cols = 2;
+  // 이번 달은 한 달을 폭 가득 크게 그린다. 전체는 달이 하나뿐이어도 칸이 커지지 않게 두 칸 폭을 유지한다
+  const cols = v.scope === 'month' ? 1 : 2;
   const panelW = SUMMARY_WIDTH - PAD * 2;
   const monthW = (panelW - PANEL_PAD * 2 - MONTH_GAP_X * (cols - 1)) / cols;
   const cell = (monthW - CELL_GAP * 6) / 7;
@@ -151,10 +163,12 @@ function drawCell(g, p, c, x, y, s) {
   }
   g.restore();
   g.fillStyle = c.status === 'nodata' || c.status === 'future' ? p.muted : p.text;
-  g.font = font(400, 17);
+  // 칸이 커지면(이번 달) 날짜 글자도 같은 비율로 키운다
+  const k = Math.max(1, s / 64);
+  g.font = font(400, Math.round(17 * k));
   g.textBaseline = 'top';
   g.textAlign = 'left';
-  g.fillText(String(c.day), x + 7, y + 6);
+  g.fillText(String(c.day), x + 7 * k, y + 6 * k);
 }
 
 export function drawSummary(g, v, p, site) {
@@ -170,7 +184,7 @@ export function drawSummary(g, v, p, site) {
   g.fillText('삼덕이 휴방 체크', PAD, PAD);
   g.fillStyle = p.text;
   g.font = font(700, 60);
-  g.fillText('전체 기록', PAD, PAD + 44);
+  g.fillText(v.title, PAD, PAD + 44);
   g.fillStyle = p.muted;
   g.font = font(400, 26);
   g.fillText(`${v.range} (${v.days}일)`, PAD, PAD + 128);
@@ -211,7 +225,7 @@ export function drawSummary(g, v, p, site) {
     g.textAlign = 'left';
     g.fillText(m.label, mx, my);
     g.fillStyle = p.muted;
-    g.font = font(400, 18);
+    g.font = font(400, Math.round(18 * Math.min(1.4, Math.max(1, L.cell / 64))));
     g.textAlign = 'center';
     DOW.forEach((d, j) => g.fillText(d, mx + j * (L.cell + CELL_GAP) + L.cell / 2, my + MONTH_LABEL + 16));
     const gy = my + MONTH_LABEL + 16 + DOW_ROW + 8;
