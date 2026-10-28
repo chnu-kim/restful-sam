@@ -1,7 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
 import worker from '../../worker/index.js';
-import { BACKFILL_EVERY_MIN, collect, loadDoc, saveDoc } from '../../worker/run.js';
+import { BACKFILL_EVERY_MIN, BACKFILL_PHASE_MIN, collect, loadDoc, saveDoc } from '../../worker/run.js';
 import { emptyData } from '../../worker/collect.js';
+import { CARD_EVERY_MIN } from '../../worker/card.js';
 
 // D1 스텁: docs 테이블 하나를 Map으로 흉내 낸다. UPDATE는 WHERE value = ? 조건까지 지킨다
 function fakeDb(initial) {
@@ -32,9 +33,9 @@ function fakeDb(initial) {
 const jsonResponse = (body, status = 200) => new Response(JSON.stringify(body), { status });
 const CLOSED = { status: 'CLOSE', openDate: '2026-09-25 08:49:35', closeDate: '2026-09-25 15:24:35', liveTitle: '포더킹2', liveCategoryValue: '포 더 킹 2' };
 const OPEN = { status: 'OPEN', openDate: '2026-10-02 20:00:00', closeDate: null, liveTitle: '저챗', liveCategoryValue: 'talk' };
-// 10분 단위가 아닌 시각 (다시보기 보충 안 함)
+// 다시보기 보충 시각이 아닌 시각
 const NOW = Date.parse('2026-10-02T03:01:00Z');
-const BACKFILL_NOW = Date.parse('2026-10-02T03:10:00Z');
+const BACKFILL_NOW = Date.parse('2026-10-02T03:15:00Z');
 
 const chzzk = (live, { videos = { code: 200, content: { data: [] } }, videosStatus = 200 } = {}) =>
   vi.fn(async (url) => (url.includes('/videos') ? jsonResponse(videos, videosStatus) : jsonResponse({ code: 200, content: live })));
@@ -118,6 +119,12 @@ describe('collect', () => {
     const r = await collect(env, { fetchImpl: f, now: BACKFILL_NOW, log: vi.fn(), warn });
     expect(JSON.parse(warn.mock.lastCall[0])).toEqual({ message: '다시보기 보충 실패', error: 'videos HTTP 503' });
     expect(r.data.streams).toHaveLength(1);
+  });
+
+  it('보충은 링크 카드 확인과 같은 분에 돌지 않는다 (한 실행의 CPU를 10ms 안에 두려고)', () => {
+    const minutes = Array.from({ length: 120 }, (_, m) => m).filter((m) => m % BACKFILL_EVERY_MIN === BACKFILL_PHASE_MIN);
+    expect(minutes).toHaveLength(120 / BACKFILL_EVERY_MIN);
+    expect(minutes.filter((m) => m % CARD_EVERY_MIN === 0)).toEqual([]);
   });
 
   it('보충 시각이면 다시보기로 놓친 방송을 더한다', async () => {
