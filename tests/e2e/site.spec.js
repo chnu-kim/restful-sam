@@ -312,7 +312,7 @@ test('콘솔 오류 없이 로드된다', async ({ page }) => {
   expect(errors).toEqual([]);
 });
 
-test('전체 요약을 열어 PNG로 저장하고, 320px에서도 넘치지 않는다', async ({ page }) => {
+test('이번 달 요약을 열어 PNG로 저장하고 전체로 바꿀 수 있으며, 320px에서도 넘치지 않는다', async ({ page }) => {
   const errors = [];
   page.on('console', (m) => m.type() === 'error' && errors.push(m.text()));
   await page.setViewportSize({ width: 320, height: 800 });
@@ -320,13 +320,22 @@ test('전체 요약을 열어 PNG로 저장하고, 320px에서도 넘치지 않�
   await page.locator('#summary-open').click();
   await expect(page.locator('#summary')).toBeVisible();
   await expect(page.locator('#summary-save')).toBeEnabled();
-  await expect(page.locator('#summary-canvas')).toHaveAttribute('aria-label', '전체 기록 요약: 2026.10.01 ~ 2026.10.02, 방송 0일, 휴방 1일, 휴방률 100%');
+  await expect(page.locator('#summary-canvas')).toHaveAttribute('aria-label', '이번 달 요약: 2026.10.01 ~ 2026.10.02, 방송 0일, 휴방 1일, 휴방률 100%');
+  // 머리 줄(제목·범위·닫기)이 한 줄에 들어간다
+  const head = await page.locator('.summary-head').evaluate((e) => ({ h: e.getBoundingClientRect().height, over: e.scrollWidth - e.clientWidth }));
+  expect(head.h).toBeLessThanOrEqual(40);
+  expect(head.over).toBeLessThanOrEqual(0);
   const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
   expect(overflow).toBeLessThanOrEqual(0);
   const [download] = await Promise.all([page.waitForEvent('download'), page.locator('#summary-save').click()]);
-  expect(download.suggestedFilename()).toBe('삼덕이-휴방-요약-2026-10-02.png');
+  expect(download.suggestedFilename()).toBe('삼덕이-휴방-요약-2026-10.png');
   const png = await (await download.createReadStream()).toArray();
   expect(Buffer.concat(png).subarray(1, 4).toString()).toBe('PNG');
+  await page.locator('[data-scope="all"]').click();
+  await expect(page.locator('#summary-canvas')).toHaveAttribute('aria-label', /^전체 기록 요약: /);
+  await expect(page.locator('#summary-save')).toBeEnabled();
+  const [all] = await Promise.all([page.waitForEvent('download'), page.locator('#summary-save').click()]);
+  expect(all.suggestedFilename()).toBe('삼덕이-휴방-요약-전체-2026-10-02.png');
   await page.keyboard.press('Escape');
   await expect(page.locator('#summary')).toBeHidden();
   expect(errors).toEqual([]);

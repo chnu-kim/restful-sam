@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { countDays, makeContext } from '../../public/src/calendar.js';
+import { computeStats, countDays, makeContext } from '../../public/src/calendar.js';
 import {
   FONT_TIMEOUT_MS, SUMMARY_WIDTH, drawSummary, loadFonts, readPalette, summaryFileName, summaryHeight, summaryLabel, summaryText, summaryView,
 } from '../../public/src/summary.js';
@@ -37,8 +37,8 @@ describe('countDays', () => {
   });
 });
 
-describe('summaryView', () => {
-  const v = summaryView(DATA, KST('2026-10-03 12:00:00'));
+describe('summaryView 전체', () => {
+  const v = summaryView(DATA, KST('2026-10-03 12:00:00'), 'all');
 
   it('기록 시작일부터 오늘까지 일수를 센다', () => {
     expect(v).toMatchObject({ today: '2026-10-03', range: '2026.10.01 ~ 2026.10.03', days: 3, on: 2, off: 1, offRate: 33 });
@@ -63,12 +63,50 @@ describe('summaryView', () => {
   it('라벨과 파일 이름', () => {
     expect(summaryLabel(v)).toBe('전체 기록 요약: 2026.10.01 ~ 2026.10.03, 방송 2일, 휴방 1일, 휴방률 33%');
     expect(summaryLabel({ ...v, offRate: null })).toContain('휴방률 -%');
-    expect(summaryFileName(v)).toBe('삼덕이-휴방-요약-2026-10-03.png');
+    expect(summaryFileName(v)).toBe('삼덕이-휴방-요약-전체-2026-10-03.png');
+  });
+});
+
+describe('summaryView 이번 달', () => {
+  // 기록이 지난달부터 있으면 이번 달 요약은 이번 달 1일부터 센다. 9/30은 휴방, 10/2 방송
+  const LONG = { ...DATA, since: '2026-09-29', checkedDays: ['2026-09-30', '2026-10-01', '2026-10-02', '2026-10-03'] };
+  const now = KST('2026-10-03 12:00:00');
+  const v = summaryView(LONG, now);
+
+  it('기본 범위이고, 이번 달만 그린다', () => {
+    expect(v).toMatchObject({ scope: 'month', title: '10월 기록', range: '2026.10.01 ~ 2026.10.03', days: 3 });
+    expect(v.months.map((m) => m.label)).toEqual(['2026년 10월']);
+    expect(summaryView(LONG, now, 'all')).toMatchObject({ title: '전체 기록', range: '2026.09.29 ~ 2026.10.03', days: 5 });
+  });
+
+  it('일수는 페이지의 월 통계와 같다', () => {
+    const { on, off, offRate } = computeStats(makeContext(LONG, '2026-10-03'));
+    expect(v).toMatchObject({ on, off, offRate });
+    expect(summaryView(LONG, now, 'all').off).toBeGreaterThan(v.off);
+  });
+
+  it('기록 시작일이 이번 달이면 그날부터 센다', () => {
+    expect(summaryView(DATA, now)).toMatchObject({ range: '2026.10.01 ~ 2026.10.03', days: 3 });
+  });
+
+  it('라벨과 파일 이름', () => {
+    expect(summaryLabel(v)).toBe(`이번 달 요약: 2026.10.01 ~ 2026.10.03, 방송 ${v.on}일, 휴방 ${v.off}일, 휴방률 ${v.offRate}%`);
+    expect(summaryFileName(v)).toBe('삼덕이-휴방-요약-2026-10.png');
+  });
+
+  it('한 달을 크게 그려 전체보다 길고, 날짜 글자도 키운다', () => {
+    expect(summaryHeight(v)).toBeGreaterThan(summaryHeight(summaryView(LONG, now, 'all')));
+    const { g, texts } = recorder();
+    const fonts = [];
+    const spy = new Proxy(g, { set: (t, k, val) => (k === 'font' && fonts.push(val), (t[k] = val), true), get: (t, k) => t[k] });
+    drawSummary(spy, v, readPalette({ getPropertyValue: () => '#000' }), 'x');
+    expect(texts()).toContain('10월 기록');
+    expect(fonts.some((f) => /^400 3\dpx/.test(f))).toBe(true);
   });
 });
 
 describe('그리기', () => {
-  const v = summaryView(DATA, KST('2026-10-03 12:00:00'));
+  const v = summaryView(DATA, KST('2026-10-03 12:00:00'), 'all');
   const palette = readPalette({ getPropertyValue: (n) => ` ${n}-값 ` });
 
   it('CSS 변수에서 색을 읽는다', () => {
@@ -84,7 +122,7 @@ describe('그리기', () => {
     expect(calls.find(([k]) => k === 'fillRect')).toEqual(['fillRect', 0, 0, SUMMARY_WIDTH, summaryHeight(v)]);
     // 오늘(아직 모름) 칸은 점선
     const pending = recorder();
-    drawSummary(pending.g, summaryView(DATA, KST('2026-10-04 12:00:00')), palette, 'x');
+    drawSummary(pending.g, summaryView(DATA, KST('2026-10-04 12:00:00'), 'all'), palette, 'x');
     expect(pending.calls.some(([k, a]) => k === 'setLineDash' && a.length)).toBe(true);
   });
 
