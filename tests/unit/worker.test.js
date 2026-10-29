@@ -44,7 +44,7 @@ describe('loadDoc / saveDoc', () => {
   it('문서가 없으면 null, 있으면 원문과 함께 읽는다', async () => {
     expect(await loadDoc(fakeDb())).toBeNull();
     const d = emptyData('2026-10-01');
-    expect(await loadDoc(fakeDb(d))).toEqual({ raw: JSON.stringify(d), data: d });
+    expect(await loadDoc(fakeDb(d))).toEqual({ raw: JSON.stringify(d), data: d, cardKey: null });
   });
 
   it('읽은 뒤 바뀌지 않았을 때만 쓴다', async () => {

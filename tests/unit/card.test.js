@@ -21,22 +21,26 @@ const DATA = {
 };
 const withStreams = (...extra) => ({ ...DATA, streams: [...DATA.streams, ...extra] });
 
-// D1 스텁: docs의 방송 기록과 og_cards(key별 카드)
+// D1 스텁: docs의 방송 기록과 og_cards(key별 카드). sqls에 실행한 SQL을 남긴다
 function cardDb(data, cards = []) {
-  const db = { cards: new Map(cards.map((c) => [c.key, c])) };
+  const db = { cards: new Map(cards.map((c) => [c.key, c])), sqls: [] };
   const newest = () => [...db.cards.values()].sort((a, b) => b.renderedAt.localeCompare(a.renderedAt));
   db.latest = () => newest()[0] ?? null;
   const stmt = (sql, args = []) => ({
     bind: (...a) => stmt(sql, a),
     first: async () => {
-      if (sql.startsWith('SELECT value FROM docs')) return data ? { value: JSON.stringify(data) } : null;
+      if (sql.startsWith('SELECT value, (SELECT key FROM og_cards ORDER BY rendered_at DESC LIMIT 1) AS card_key FROM docs')) {
+        return data ? { value: JSON.stringify(data), card_key: db.latest()?.key ?? null } : null;
+      }
       if (sql === 'SELECT key FROM og_cards ORDER BY rendered_at DESC LIMIT 1') return db.latest() && { key: db.latest().key };
       if (sql === 'SELECT png FROM og_cards ORDER BY rendered_at DESC LIMIT 1') return db.latest() && { png: db.latest().png };
       if (sql === 'SELECT png FROM og_cards WHERE key = ?') return db.cards.has(args[0]) ? { png: db.cards.get(args[0]).png } : null;
       throw new Error(`예상 못 한 SQL: ${sql}`);
     },
     run: async () => {
-      if (sql.startsWith('INSERT OR REPLACE INTO og_cards')) {
+      if (sql.startsWith('UPDATE docs SET value')) {
+        data = JSON.parse(args[0]);
+      } else if (sql.startsWith('INSERT OR REPLACE INTO og_cards')) {
         const [key, png, renderedAt] = args;
         // D1은 BLOB을 숫자 배열로 돌려준다
         db.cards.set(key, { key, png: [...new Uint8Array(png)], renderedAt });
@@ -47,7 +51,7 @@ function cardDb(data, cards = []) {
       return { meta: { changes: 1 } };
     },
   });
-  db.prepare = (sql) => stmt(sql);
+  db.prepare = (sql) => (db.sqls.push(sql), stmt(sql));
   return db;
 }
 
@@ -132,6 +136,13 @@ describe('updateCard', () => {
     expect(await updateCard(env, { now: NOW, data: DATA, log: vi.fn() })).not.toBeNull();
   });
 
+  it('수집 때 읽은 저장 카드 key를 넘겨받으면 D1을 읽지 않는다', async () => {
+    const env = { DB: { prepare: vi.fn() }, BROWSER: browser() };
+    const key = await cardKey(cardHtml(cardView(DATA, NOW)));
+    expect(await updateCard(env, { now: NOW, data: DATA, storedKey: key })).toBeNull();
+    expect(env.DB.prepare).not.toHaveBeenCalled();
+  });
+
   it('홀수 분에는 D1도 읽지 않는다', async () => {
     const env = { DB: { prepare: vi.fn() }, BROWSER: browser() };
     expect(await updateCard(env, { now: NOW + 60_000 })).toBeNull();
@@ -180,6 +191,9 @@ describe('servePage', () => {
     const noCard = await (await servePage(new Request('https://site.dev/'), { DB: cardDb(DATA), ASSETS: assets() }, NOW)).text();
     expect(noCard).toContain('23일 연속 휴방');
     expect(noCard).not.toContain('og:image');
+    // 기록 문서가 없어도 찍어 둔 카드가 있으면 이미지는 단다
+    const docless = await (await servePage(new Request('https://site.dev/'), { DB: cardDb(null, [card('k1')]), ASSETS: assets() }, NOW)).text();
+    expect(docless).toContain('og.png?k=k1');
 
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
     const broken = { prepare: () => ({ bind: () => ({ first: async () => { throw new Error('D1 끊김'); } }) }) };
@@ -236,6 +250,20 @@ describe('Worker 라우팅', () => {
     expect(xml).toContain('<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">');
     expect(xml.match(/<loc>/g)).toHaveLength(1);
     expect(xml).toContain('<loc>https://site.dev/</loc>');
+  });
+
+  it('예약 실행은 카드 차례인 분에도 D1을 한 번만 읽는다 (CPU 10ms 한도)', async () => {
+    const env = { DB: cardDb(DATA), BROWSER: browser() };
+    const live = { status: 'CLOSE', openDate: '2026-09-25 08:49:35', closeDate: '2026-09-25 15:24:35', liveTitle: '방송', liveCategoryValue: 'talk' };
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation(async () => new Response(JSON.stringify({ code: 200, content: live })));
+    const log = vi.spyOn(console, 'log').mockImplementation(() => {});
+    const waits = [];
+    await worker.scheduled({ scheduledTime: NOW }, env, { waitUntil: (p) => waits.push(p) });
+    await Promise.all(waits);
+    expect(env.BROWSER.quickAction).toHaveBeenCalledTimes(1);
+    expect(env.DB.sqls.filter((s) => s.startsWith('SELECT'))).toHaveLength(1);
+    fetchSpy.mockRestore();
+    log.mockRestore();
   });
 
   it('예약 실행은 수집이 실패해도 저장된 기록으로 카드를 갱신한다', async () => {

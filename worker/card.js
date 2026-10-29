@@ -143,14 +143,18 @@ export async function storedCardKey(db) {
   return (await db.prepare('SELECT key FROM og_cards ORDER BY rendered_at DESC LIMIT 1').first())?.key ?? null;
 }
 
-// 카드가 바뀌었으면 다시 찍어 저장한다. 찍었으면 새 key, 아니면 null. data를 받으면 D1을 다시 읽지 않는다
-export async function updateCard(env, { now = Date.now(), data, log = console.log } = {}) {
+// 카드가 바뀌었으면 다시 찍어 저장한다. 찍었으면 새 key, 아니면 null.
+// 수집 결과(data와 그때 읽은 저장 카드 key)를 받으면 D1을 다시 읽지 않는다
+export async function updateCard(env, { now = Date.now(), data, storedKey, log = console.log } = {}) {
   if (Math.floor(now / 60000) % CARD_EVERY_MIN !== 0) return null;
-  data ??= (await loadDoc(env.DB))?.data;
-  if (!data) return null;
+  if (!data) {
+    const doc = await loadDoc(env.DB);
+    if (!doc) return null;
+    ({ data, cardKey: storedKey } = doc);
+  }
   const html = cardHtml(cardView(data, now));
   const key = await cardKey(html);
-  if ((await storedCardKey(env.DB)) === key) return null;
+  if ((storedKey === undefined ? await storedCardKey(env.DB) : storedKey) === key) return null;
 
   // 폰트를 못 받으면 글자 없는 카드를 저장하지 않도록 기다리다 실패한다
   const res = await env.BROWSER.quickAction('screenshot', {

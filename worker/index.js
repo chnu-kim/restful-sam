@@ -31,8 +31,8 @@ export default {
     // 링크 카드는 방금 수집한 기록으로 그린다. 수집이 실패해도 날짜가 바뀌는 등 카드는 갱신될 수 있어 저장된 기록으로 그린다
     ctx.waitUntil(
       collected
-        .then(({ data }) => data, () => undefined)
-        .then((data) => updateCard(env, { now: event.scheduledTime, data }))
+        .then(({ data, cardKey }) => ({ data, storedKey: cardKey }), () => ({}))
+        .then((got) => updateCard(env, { now: event.scheduledTime, ...got }))
         .catch((e) => console.warn(JSON.stringify({ message: '링크 카드 갱신 실패', error: e.message }))),
     );
   },
