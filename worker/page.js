@@ -19,7 +19,7 @@ async function cardMeta(env, now) {
   try {
     const doc = await loadDoc(env.DB);
     const view = doc && cardView(doc.data, now);
-    const key = await storedCardKey(env.DB);
+    const key = doc ? doc.cardKey : await storedCardKey(env.DB);
     return view ? { title: `${SITE_NAME} — ${view.headline}`, description: view.description, color: TONE_COLORS[view.tone], key } : { title: SITE_NAME, key };
   } catch (e) {
     console.warn(JSON.stringify({ message: '링크 카드 메타 실패', error: e.message }));

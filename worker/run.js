@@ -7,10 +7,14 @@ export const BACKFILL_EVERY_MIN = 10;
 // 짝수 분의 링크 카드 확인(card.js)과 한 실행에 겹치면 CPU 10ms 한도를 넘기 쉬워, 5·15·25…분에 돈다
 export const BACKFILL_PHASE_MIN = 5;
 
-// 저장된 원문(raw)도 함께 돌려줘, 저장할 때 그 사이 다른 실행이 바꿨는지 비교한다
+// 저장된 원문(raw)도 함께 돌려줘, 저장할 때 그 사이 다른 실행이 바꿨는지 비교한다.
+// 가장 최근 링크 카드의 key(cardKey)도 같은 쿼리로 읽는다. cron 한 번의 D1 호출을 줄여 CPU 10ms 한도 안에 두려고
 export async function loadDoc(db) {
-  const row = await db.prepare('SELECT value FROM docs WHERE key = ?').bind(DOC_KEY).first();
-  return row ? { raw: row.value, data: validateData(JSON.parse(row.value)) } : null;
+  const row = await db
+    .prepare('SELECT value, (SELECT key FROM og_cards ORDER BY rendered_at DESC LIMIT 1) AS card_key FROM docs WHERE key = ?')
+    .bind(DOC_KEY)
+    .first();
+  return row ? { raw: row.value, data: validateData(JSON.parse(row.value)), cardKey: row.card_key ?? null } : null;
 }
 
 // 읽은 뒤 바뀌지 않았을 때만 쓴다 (1분 cron이 겹쳐 옛 결과가 새 결과를 덮어쓰지 않도록). 썼으면 true
@@ -45,5 +49,5 @@ export async function collect(env, { fetchImpl = fetch, now = Date.now(), servic
   }
   // 대시보드에서 검색·필터할 수 있도록 구조화된 JSON으로 남긴다
   log(JSON.stringify({ message: changed ? '갱신됨' : '변경 없음', status: live.status, openDate: live.openDate, live: next.live }));
-  return { changed, data: next };
+  return { changed, data: next, cardKey: doc.cardKey };
 }
