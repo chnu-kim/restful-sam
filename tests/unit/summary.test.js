@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { computeStats, countDays, makeContext } from '../../public/src/calendar.js';
 import {
-  FONT_TIMEOUT_MS, SUMMARY_WIDTH, drawSummary, loadFonts, readPalette, summaryFileName, summaryHeight, summaryLabel, summaryText, summaryView,
+  FONT_TIMEOUT_MS, SUMMARY_WIDTH, drawSummary, loadFonts, readPalette, summaryFileName, summaryHeight, summaryLabel, summaryMonths, summaryText, summaryView,
 } from '../../public/src/summary.js';
 
 const KST = (s) => Date.parse(s.replace(' ', 'T') + '+09:00');
@@ -102,6 +102,31 @@ describe('summaryView 이번 달', () => {
     drawSummary(spy, v, readPalette({ getPropertyValue: () => '#000' }), 'x');
     expect(texts()).toContain('10월 기록');
     expect(fonts.some((f) => /^400 3\dpx/.test(f))).toBe(true);
+  });
+});
+
+describe('summaryView 지난달', () => {
+  const now = KST('2026-10-03 12:00:00');
+  // 9/25는 기록 시작(10/1) 전 방송만 있는 달
+  const v = summaryView(DATA, now, 'month', '2026-09');
+
+  it('그달 말일까지 그 달만 그리고, 기록 시작 전 날은 세지 않는다', () => {
+    expect(v).toMatchObject({ ym: '2026-09', title: '9월 기록', range: '2026.09.01 ~ 2026.09.30', on: 0, off: 0, offRate: null });
+    expect(v.months.map((m) => m.label)).toEqual(['2026년 9월']);
+  });
+
+  it('기록이 있는 지난달은 기록 시작일부터 말일까지 센다', () => {
+    const LONG = { ...DATA, since: '2026-09-29', checkedDays: ['2026-09-30', '2026-10-01'] };
+    expect(summaryView(LONG, now, 'month', '2026-09')).toMatchObject({ range: '2026.09.29 ~ 2026.09.30', days: 2, off: 2 });
+  });
+
+  it('라벨과 파일 이름에 그 달이 들어간다', () => {
+    expect(summaryLabel(v)).toMatch(/^2026년 9월 요약: /);
+    expect(summaryFileName(v)).toBe('삼덕이-휴방-요약-2026-09.png');
+  });
+
+  it('고를 수 있는 달은 첫 달부터 이번 달까지', () => {
+    expect(summaryMonths(DATA, now)).toEqual({ first: '2026-09', last: '2026-10' });
   });
 });
 

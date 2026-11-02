@@ -3,7 +3,7 @@ import {
   DOW, addDays, addMonths, computeStats, dayOfWeek, dayMinutes, dayStatus, dayTimeRange, durationLong, esc, fillPercent, firstMonth, hm, liveFresh, liveStream,
   makeContext, monthDays, monthLabel, offStreakBefore, offStreakText, startedAt, streamMinutes, todayKst,
 } from './calendar.js';
-import { SUMMARY_WIDTH, drawSummary, loadFonts, readPalette, summaryFileName, summaryHeight, summaryLabel, summaryText, summaryView } from './summary.js';
+import { SUMMARY_WIDTH, drawSummary, loadFonts, readPalette, summaryFileName, summaryHeight, summaryLabel, summaryMonths, summaryText, summaryView } from './summary.js';
 
 const MARKS = { on: '방송', off: '휴방', pending: '?', unknown: '미확인', nodata: '', future: '' };
 const LABELS = { on: '방송', off: '휴방', pending: '아직 방송 전', unknown: '확인 전', nodata: '기록 없음', future: '' };
@@ -253,16 +253,18 @@ export function bindTheme(root = document, win = window) {
   sync();
 }
 
-// 기록 요약: 열 때마다, 또 범위를 바꿀 때마다 현재 테마 색으로 다시 그린다
-export async function openSummary(root, state, win = window, scope = 'month') {
+// 기록 요약: 열 때마다, 또 범위·달을 바꿀 때마다 현재 테마 색으로 다시 그린다. 달은 기본이 이번 달
+export async function openSummary(root, state, win = window, scope = 'month', ym = state.today.slice(0, 7)) {
   const dialog = root.getElementById('summary');
   const canvas = root.getElementById('summary-canvas');
   const save = root.getElementById('summary-save');
   // 폰트를 기다리는 사이 범위를 또 바꾸면, 먼저 시작한 그리기가 늦게 끝나 덮어쓰지 않게 마지막 요청만 그린다
   const seq = (state.summarySeq = (state.summarySeq ?? 0) + 1);
-  const view = summaryView(state.data, state.now, scope);
+  const view = summaryView(state.data, state.now, scope, ym);
   const site = win.location.host;
+  state.summaryMonth = ym;
   for (const b of root.querySelectorAll('[data-scope]')) b.setAttribute('aria-pressed', String(b.dataset.scope === scope));
+  syncSummaryMonth(root, state);
   canvas.setAttribute('aria-label', summaryLabel(view));
   const height = summaryHeight(view);
   save.disabled = true;
@@ -280,6 +282,24 @@ export async function openSummary(root, state, win = window, scope = 'month') {
   if (seq !== state.summarySeq) return;
   state.summaryFile = blob && new win.File([blob], summaryFileName(view), { type: 'image/png' });
   save.disabled = !state.summaryFile;
+}
+
+// 달 버튼에 고른 달을 보이고, 고를 수 있는 끝 달에선 화살표를 끈다
+function syncSummaryMonth(root, state) {
+  const ym = state.summaryMonth;
+  const { first, last } = summaryMonths(state.data, state.now);
+  const [y, m] = ym.split('-').map(Number);
+  const month = root.getElementById('summary-month');
+  // 올해가 아닌 달만 연도를 붙여 버튼을 짧게 둔다
+  month.textContent = ym.slice(0, 4) === last.slice(0, 4) ? `${m}월` : `${String(y).slice(2)}년 ${m}월`;
+  month.setAttribute('aria-label', `${y}년 ${m}월`);
+  const pressed = root.activeElement;
+  root.getElementById('summary-prev').disabled = ym <= first;
+  root.getElementById('summary-next').disabled = ym >= last;
+  // 끝 달에 닿아 누른 화살표가 꺼지면 포커스가 사라지므로 반대쪽으로 옮긴다
+  if (pressed?.disabled && (pressed.id === 'summary-prev' || pressed.id === 'summary-next')) {
+    root.getElementById(pressed.id === 'summary-prev' ? 'summary-next' : 'summary-prev').focus();
+  }
 }
 
 // 폰(터치)에선 공유 시트로 넘겨 사진에 저장할 수 있게 하고, 그 밖에는 파일로 내려받는다
@@ -310,7 +330,11 @@ export function bindSummary(root, state, win = window) {
   open.addEventListener('click', () => openSummary(root, state, win));
   root.getElementById('summary-close').addEventListener('click', () => dialog.close());
   for (const b of root.querySelectorAll('[data-scope]')) {
-    b.addEventListener('click', () => b.getAttribute('aria-pressed') !== 'true' && openSummary(root, state, win, b.dataset.scope));
+    b.addEventListener('click', () => b.getAttribute('aria-pressed') !== 'true' && openSummary(root, state, win, b.dataset.scope, state.summaryMonth));
+  }
+  // 화살표는 전체를 보고 있을 때도 그 달 요약으로 넘어간다
+  for (const [id, n] of [['summary-prev', -1], ['summary-next', 1]]) {
+    root.getElementById(id).addEventListener('click', () => openSummary(root, state, win, 'month', addMonths(state.summaryMonth, n)));
   }
   // 바깥(배경)을 누르면 닫는다. 배경 클릭도 target이 dialog라 모달 테두리 안쪽(여백) 클릭과 위치로 가른다
   dialog.addEventListener('click', (e) => {

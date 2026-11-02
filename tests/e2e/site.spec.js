@@ -331,6 +331,9 @@ test('이번 달 요약을 열어 PNG로 저장하고 전체로 바꿀 수 있�
   expect(download.suggestedFilename()).toBe('삼덕이-휴방-요약-2026-10.png');
   const png = await (await download.createReadStream()).toArray();
   expect(Buffer.concat(png).subarray(1, 4).toString()).toBe('PNG');
+  await expect(page.locator('#summary-month')).toHaveText('10월');
+  await page.locator('#summary-prev').click();
+  await expect(page.locator('#summary-canvas')).toHaveAttribute('aria-label', /^2026년 9월 요약: /);
   await page.locator('[data-scope="all"]').click();
   await expect(page.locator('#summary-canvas')).toHaveAttribute('aria-label', /^전체 기록 요약: /);
   await expect(page.locator('#summary-save')).toBeEnabled();

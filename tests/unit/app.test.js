@@ -594,6 +594,29 @@ describe('기록 요약', () => {
     expect($('[data-scope="month"]').getAttribute('aria-pressed')).toBe('true');
   });
 
+  it('화살표로 달을 고르고, 끝 달에선 화살표를 끄며, 다시 열면 이번 달로 돌아간다', async () => {
+    const state = createState(DATA, KST('2026-10-02 12:00:00'));
+    bindSummary(document, state, fakeWindow());
+    $('#summary-open').click();
+    await vi.waitFor(() => expect($('#summary-save').disabled).toBe(false));
+    expect($('#summary-month').textContent).toBe('10월');
+    expect($('#summary-next').disabled).toBe(true);
+    $('#summary-prev').click();
+    await vi.waitFor(() => expect(state.summaryFile?.name).toBe('삼덕이-휴방-요약-2026-09.png'));
+    expect($('#summary-month').textContent).toBe('9월');
+    expect($('#summary-prev').disabled).toBe(true);
+    expect($('#summary-next').disabled).toBe(false);
+    // 전체를 봤다가 달 버튼을 누르면 고르던 달로 돌아온다
+    $('[data-scope="all"]').click();
+    await vi.waitFor(() => expect(state.summaryFile?.name).toMatch(/전체/));
+    $('#summary-month').click();
+    await vi.waitFor(() => expect(state.summaryFile?.name).toBe('삼덕이-휴방-요약-2026-09.png'));
+    $('#summary').close();
+    $('#summary-open').click();
+    await vi.waitFor(() => expect(state.summaryFile?.name).toBe('삼덕이-휴방-요약-2026-10.png'));
+    expect($('#summary-month').textContent).toBe('10월');
+  });
+
   it('폰트를 기다리는 사이 범위를 바꾸면 마지막 범위만 그린다', async () => {
     const state = createState(DATA, KST('2026-10-02 12:00:00'));
     const fonts = [];
