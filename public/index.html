@@ -201,6 +201,9 @@
     font: inherit; font-size: 13px; font-weight: 600; cursor: pointer;
   }
   .summary-scope button[aria-pressed="true"] { background: var(--text); color: var(--surface); }
+  /* 달 넘기기 화살표: 고른 달 양옆에 붙인다. 끝 달에선 흐리게 */
+  .summary-scope .summary-step { padding: 0 6px; font-size: 16px; }
+  .summary-scope .summary-step:disabled { opacity: .3; cursor: default; }
   .summary-close {
     width: 36px; height: 36px; background: none; border: 1px solid var(--line); border-radius: 8px;
     color: var(--text); font-size: 20px; line-height: 1; cursor: pointer;
@@ -261,7 +264,9 @@
       <h2 id="summary-title">요약</h2>
       <div class="summary-head-end">
         <div class="summary-scope" role="group" aria-label="요약 범위">
-          <button type="button" data-scope="month" aria-pressed="true">이번 달</button>
+          <button type="button" class="summary-step" id="summary-prev" aria-label="이전 달">‹</button>
+          <button type="button" id="summary-month" data-scope="month" aria-pressed="true">이번 달</button>
+          <button type="button" class="summary-step" id="summary-next" aria-label="다음 달">›</button>
           <button type="button" data-scope="all" aria-pressed="false">전체</button>
         </div>
         <button class="summary-close" id="summary-close" type="button" aria-label="닫기">×</button>

@@ -1,4 +1,4 @@
-// 기록 요약 이미지(이번 달·전체). 모달에 보이는 캔버스를 그대로 PNG로 저장해 화면과 파일이 어긋나지 않게 한다.
+// 기록 요약 이미지(고른 달·전체). 모달에 보이는 캔버스를 그대로 PNG로 저장해 화면과 파일이 어긋나지 않게 한다.
 // 칸 판정은 달력과 같은 calendar.js 함수를 쓰고, 색은 페이지의 CSS 변수(현재 테마)에서 읽어 온다
 import {
   DOW, addDays, addMonths, countDays, dayMinutes, dayOfWeek, dayStatus, fillPercent, firstMonth, makeContext, monthDays, todayKst,
@@ -32,23 +32,38 @@ export function readPalette(style) {
 
 const dotDate = (d) => d.replaceAll('-', '.');
 
-// 요약 범위. 이번 달은 오늘이 속한 달 하나, 전체는 기록이 있는 모든 달
+// 요약 범위. 달은 고른 달 하나(기본은 이번 달), 전체는 기록이 있는 모든 달
 export const SCOPES = {
-  month: { title: (ym) => `${Number(ym.slice(5))}월 기록`, label: '이번 달 요약', file: (today) => today.slice(0, 7) },
-  all: { title: () => '전체 기록', label: '전체 기록 요약', file: (today) => `전체-${today}` },
+  month: {
+    title: (v) => `${Number(v.ym.slice(5))}월 기록`,
+    label: (v) => (v.ym === v.today.slice(0, 7) ? '이번 달 요약' : `${v.ym.slice(0, 4)}년 ${Number(v.ym.slice(5))}월 요약`),
+    file: (v) => v.ym,
+  },
+  all: { title: () => '전체 기록', label: () => '전체 기록 요약', file: (v) => `전체-${v.today}` },
 };
 
-// 그릴 내용. 일수는 시작일(기록 시작일, 이번 달이면 그달 1일과 비교해 늦은 쪽)부터 오늘까지로 월 통계와 같은 규칙,
-// 달력은 이번 달이면 그달만, 전체면 달력에서 넘길 수 있는 첫 달부터 이번 달까지
-export function summaryView(data, now, scope = 'month') {
+// 요약에서 고를 수 있는 달: 달력에서 넘길 수 있는 첫 달부터 이번 달까지
+export const summaryMonths = (data, now) => ({ first: firstMonth(data), last: todayKst(now).slice(0, 7) });
+
+// 그릴 내용. 일수는 시작일(기록 시작일, 달 범위면 그달 1일과 비교해 늦은 쪽)부터 끝날(오늘, 지난달이면 그달 말일)까지로 월 통계와 같은 규칙,
+// 달력은 달 범위면 그달만, 전체면 달력에서 넘길 수 있는 첫 달부터 이번 달까지
+export function summaryView(data, now, scope = 'month', ym = todayKst(now).slice(0, 7)) {
   const today = todayKst(now);
-  const ym = today.slice(0, 7);
+  const current = today.slice(0, 7);
   const ctx = makeContext(data, today);
-  const start = scope === 'month' && `${ym}-01` > data.since ? `${ym}-01` : data.since;
+  let start = data.since;
+  let end = today;
+  if (scope === 'month') {
+    const md = monthDays(ym);
+    if (md[0] > start) start = md[0];
+    if (md.at(-1) < end) end = md.at(-1);
+    // 기록 시작 전 방송만 있는 달은 그달 전체를 범위로 둔다 (기록 시작 전 날은 세지 않는다)
+    if (start > end) start = md[0];
+  }
   const days = [];
-  for (let d = start; d <= today; d = addDays(d, 1)) days.push(d);
+  for (let d = start; d <= end; d = addDays(d, 1)) days.push(d);
   const months = [];
-  for (let m = scope === 'month' ? ym : firstMonth(data); m <= ym; m = addMonths(m, 1)) {
+  for (let m = scope === 'month' ? ym : firstMonth(data); m <= (scope === 'month' ? ym : current); m = addMonths(m, 1)) {
     const md = monthDays(m);
     const [y, mo] = m.split('-').map(Number);
     months.push({
@@ -64,15 +79,13 @@ export function summaryView(data, now, scope = 'month') {
       ],
     });
   }
-  const s = SCOPES[scope];
-  return {
-    scope, today, title: s.title(ym), range: `${dotDate(start)} ~ ${dotDate(today)}`, days: days.length, ...countDays(ctx, days), months,
-  };
+  const v = { scope, today, ym, range: `${dotDate(start)} ~ ${dotDate(end)}`, days: days.length, ...countDays(ctx, days), months };
+  return { ...v, title: SCOPES[scope].title(v) };
 }
 
 // 스크린 리더용 설명과 저장 파일 이름
-export const summaryLabel = (v) => `${SCOPES[v.scope].label}: ${v.range}, 방송 ${v.on}일, 휴방 ${v.off}일, 휴방률 ${v.offRate ?? '-'}%`;
-export const summaryFileName = (v) => `삼덕이-휴방-요약-${SCOPES[v.scope].file(v.today)}.png`;
+export const summaryLabel = (v) => `${SCOPES[v.scope].label(v)}: ${v.range}, 방송 ${v.on}일, 휴방 ${v.off}일, 휴방률 ${v.offRate ?? '-'}%`;
+export const summaryFileName = (v) => `삼덕이-휴방-요약-${SCOPES[v.scope].file(v)}.png`;
 
 const TILES = (v) => [
   [`${v.on}일`, '방송한 날'],
